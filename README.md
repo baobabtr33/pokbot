@@ -61,3 +61,5 @@ Layout: `core/` (engine, protocol, tournament), `cli/` (the `pokbot` command), `
 [docs/DEPLOY.md](docs/DEPLOY.md). Project notes for contributors: [CLAUDE.md](CLAUDE.md).
 
 Texas Hold'em is playable today; Omaha, Seven-Card Stud and Five-Card Draw are next.
+
+MIT licensed. See [LICENSE](LICENSE).
