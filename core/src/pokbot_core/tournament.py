@@ -32,6 +32,7 @@ class TournamentConfig:
     match: MatchConfig = field(default_factory=MatchConfig)
     seed: int | None = None
     budget_s: float | None = None  # wall-clock budget for the whole tournament; tables stop early
+    max_parallel_tables: int | None = None  # limit concurrent tables (each may run bot containers)
     def __post_init__(self) -> None:
         if self.table_size <= ADVANCE_PER_TABLE:
             raise ValueError(f"table_size must be > {ADVANCE_PER_TABLE} so the field shrinks")
@@ -130,13 +131,17 @@ class Tournament:
         round_no = 0
         while True:
             round_no += 1
-            deadline = None
-            if self.config.budget_s is not None:
-                # Split the remaining budget evenly over the rounds still to play.
-                left = self.config.budget_s - (time.monotonic() - started)
-                deadline = time.monotonic() + max(left, 0) / rounds_needed(len(alive), self.config.table_size)
             final = len(alive) <= self.config.table_size
             tables = [alive] if final else seat_tables(alive, self.config.table_size, self.rng)
+            parallel = self.config.max_parallel_tables or len(tables)
+            table_budget = None
+            if self.config.budget_s is not None:
+                # Split the remaining budget over the rounds still to play, then over the batches
+                # of tables this round runs in (tables beyond `parallel` wait their turn).
+                left = max(self.config.budget_s - (time.monotonic() - started), 0)
+                batches = math.ceil(len(tables) / parallel)
+                table_budget = left / rounds_needed(len(alive), self.config.table_size) / batches
+            gate = asyncio.Semaphore(parallel)
             seated_tables = [self._fill(t, round_no) for t in tables]
             await self._emit(
                 {
@@ -147,7 +152,7 @@ class Tournament:
                 }
             )
             results = await asyncio.gather(
-                *(self._play_table(round_no, ti, t, final, deadline) for ti, t in enumerate(seated_tables))
+                *(self._gated(gate, round_no, ti, t, final, table_budget) for ti, t in enumerate(seated_tables))
             )
             alive = [p for advancing in results for p in advancing]
             await self._emit(
@@ -168,6 +173,11 @@ class Tournament:
         result["points"] = award_points(result)
         await self._emit(result)
         return result
+
+    async def _gated(self, gate, round_no, table_no, seated, final, budget_s):
+        async with gate:
+            deadline = time.monotonic() + budget_s if budget_s is not None else None
+            return await self._play_table(round_no, table_no, seated, final, deadline)
 
     async def _play_table(
         self, round_no: int, table_no: int, seated: list[Player], final: bool, deadline: float | None = None

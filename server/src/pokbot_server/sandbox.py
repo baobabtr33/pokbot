@@ -30,6 +30,8 @@ def docker_argv(bot_dir: Path, record: dict) -> list[str]:
         cmd = ["node", entry]
     return [
         "docker", "run", "--rm", "-i",
+        *([f"--runtime={settings.docker_runtime}"] if settings.docker_runtime else []),
+        "--label", "pokbot.bot=1",
         "--network=none",
         "--read-only",
         "--tmpfs", "/tmp:rw,size=64m",

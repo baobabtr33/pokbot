@@ -232,3 +232,15 @@ async def test_tournament_reports_points_and_respects_budget():
     assert time.monotonic() - start < 5
     assert result["points"][result["winner"]] >= 100
     assert all(s["hands"] > 0 for t in result["tables"] for s in t["standings"])
+
+
+async def test_parallel_table_limit_still_finishes_on_budget():
+    import time
+
+    entrants = [Entrant(f"bot{i}") for i in range(20)]  # 4 tables in round 1
+    cfg = TournamentConfig(bot_hands=10**9, seed=3, budget_s=2.0, max_parallel_tables=1)
+    start = time.monotonic()
+    result = await Tournament(entrants, cfg).run()
+    assert time.monotonic() - start < 5
+    assert result["winner"]
+    assert all(s["hands"] > 0 for t in result["tables"] for s in t["standings"])

@@ -37,6 +37,9 @@ class Settings:
     dev_login: bool = field(default_factory=lambda: os.environ.get("POKBOT_DEV_LOGIN") == "1")
     # Public URL baked into install.sh; defaults to the URL the request came in on.
     public_url: str = field(default_factory=lambda: os.environ.get("POKBOT_PUBLIC_URL", ""))
+    # Container runtime for uploaded bots: "runsc" (gVisor) in production, "" for Docker's default.
+    docker_runtime: str = field(default_factory=lambda: os.environ.get("POKBOT_DOCKER_RUNTIME", ""))
+    max_parallel_tables: int = field(default_factory=lambda: _int("POKBOT_MAX_PARALLEL_TABLES", 2))
     core_src: Path = REPO_ROOT / "core" / "src"
     spectator_fps: int = 10
 

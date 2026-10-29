@@ -245,10 +245,12 @@ an engine test without checking the actual poker rule.
 
 ## Deployment
 
-Planned: Vercel for the site, `install.sh` and wheels; one AWS Lightsail instance ($12 plan)
-for `pokbot-server` and the Docker/gVisor sandbox, ~$15/month total, paid from AWS free credits
-(Lightsail 3-month trial + new-account credits cover about the first year). See `docs/DEPLOY.md`
-(not implemented yet).
+All on AWS: one Lightsail instance ($12 plan) runs Caddy (TLS) + `pokbot-server` + Docker/gVisor
+for uploaded bots, and also serves the site, `install.sh` and wheels. Paid from AWS free credits
+for about the first year, then ~$15/month. Runbook: `docs/DEPLOY.md`. Scripts:
+`scripts/aws/provision.sh` (create), `scripts/aws/deploy.sh` (ship committed HEAD),
+`deploy/` (bootstrap, systemd units, Caddyfile, remote install with rollback).
+Server knobs for small boxes: `POKBOT_DOCKER_RUNTIME=runsc`, `POKBOT_MAX_PARALLEL_TABLES`.
 
 ## Not done yet
 

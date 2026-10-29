@@ -1,0 +1,23 @@
+[Unit]
+Description=pokbot tournament server
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+User=pokbot
+Group=pokbot
+WorkingDirectory=/opt/pokbot/current
+EnvironmentFile=/etc/pokbot/env
+Environment=UV_CACHE_DIR=/var/lib/pokbot/.cache/uv
+# One process only: the scheduler, lobby and chat live in memory.
+ExecStart=/opt/pokbot/current/.venv/bin/pokbot-server --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -23,6 +23,8 @@ def run() -> None:
         reload=args.reload,
         ws_max_size=64 * 1024,  # protocol replies and chat lines are tiny; cap floods
         ws_ping_interval=20,
+        proxy_headers=True,  # behind Caddy on the same host
+        forwarded_allow_ips="127.0.0.1",
     )
 
 

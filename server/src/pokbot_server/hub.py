@@ -221,6 +221,7 @@ class Hub:
             human_hands=settings.human_hands,
             match=MatchConfig(time_ms=settings.time_ms, timebank_ms=settings.timebank_ms),
             budget_s=settings.budget_s,
+            max_parallel_tables=settings.max_parallel_tables,
         )
         self.running = Tournament(entrants, cfg, on_event=self.on_event)
         log.info("tournament %s starting with %d entrants", self.running.id, len(entrants))

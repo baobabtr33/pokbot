@@ -1,194 +1,112 @@
-# Deploying pokbot: Vercel + AWS
+# Deploying pokbot on AWS
 
-Status: plan, not yet implemented. Domains below use `pokbot.dev` as a placeholder.
+Everything runs on **one AWS Lightsail instance**: the intro site, `install.sh`, the installer
+wheels, the REST API, websockets, the 30-minute scheduler, chat, and the Docker + gVisor
+sandbox for uploaded bots. Caddy terminates TLS in front of it. No Vercel, no load balancer.
 
-## Topology
-
-| Host | Serves | Why |
-|---|---|---|
-| **Vercel** `pokbot.dev` | `web/` intro page, `install.sh`, `/dist/*` wheels; rewrites `/api/*` to AWS | Static + CDN; free/cheap; preview deploys |
-| **AWS Lightsail** `api.pokbot.dev` | `pokbot-server` (REST, `/ws/play`, `/ws/watch`, scheduler, chat), Docker + gVisor sandbox for uploaded bots | Needs long-lived websockets, an in-memory 30-minute scheduler, and Docker for untrusted code |
-
-Vercel Functions cannot run the game server: they are short-lived, cannot hold websockets
-for a tournament, and cannot launch containers. Vercel rewrites do not proxy websockets, so
-the CLI and the web page connect to `wss://api.pokbot.dev/ws/*` directly.
-
-**URL rule:** `install.sh` writes `https://api.pokbot.dev` into the CLI config; the CLI uses
-that one URL for all HTTP and websocket traffic. Downloads come from `https://pokbot.dev/dist`.
-
-## Code changes before launch
-
-1. **URL split**
-   - `web/install.sh`: add `SERVER="${POKBOT_SERVER:-__POKBOT_SERVER__}"`; keep `BASE` for
-     `$BASE/dist/*`; write `{"server": "$SERVER"}` into the CLI config.
-   - `cli/src/pokbot_cli/config.py`: `DEFAULT_SERVER = "https://api.pokbot.dev"`.
-   - `web/index.html`: keep relative `/api/...` fetches (Vercel rewrite); add
-     `<meta name="pokbot-api" content="__POKBOT_SERVER__">` for any direct `wss://` use,
-     falling back to `location.origin` in local dev.
-   - `server/src/pokbot_server/config.py`: add `POKBOT_SITE_URL`; prod sets
-     `POKBOT_PUBLIC_URL=https://api.pokbot.dev`.
-   - `server/src/pokbot_server/app.py`: `/install.sh` substitutes both placeholders (self-hosting
-     keeps working); mount `web/` only when present; Origin allowlist on websockets
-     (`https://pokbot.dev` or no Origin for the CLI); `Cache-Control: public, s-maxage=10` on
-     schedule/leaderboard/online.
-   - New `scripts/build_site.sh`: install uv if missing, run `build_dist.sh`, copy `web/` to
-     `public/`, substitute `__POKBOT_BASE__` and `__POKBOT_SERVER__`, fail if any `__POKBOT_`
-     remains. Add `public/` to `.gitignore`.
-2. **`server/src/pokbot_server/main.py`**: `proxy_headers=True, forwarded_allow_ips="127.0.0.1"`;
-   keep `ws_ping_interval=20`; exactly one worker (the Hub is in memory).
-3. **Tournament limits**: done: 5 ms per-decision cap (`POKBOT_TIME_MS`), 150 ms network
-   allowance for live bots (`POKBOT_LIVE_NETWORK_MS`), 1 s time bank, and a 25-minute
-   tournament budget split across rounds (`POKBOT_TOURNAMENT_BUDGET_S`). Still to do: a
-   `POKBOT_MAX_CONTAINERS` semaphore around `_play_table` (today every table starts at once).
-4. **Sandbox** (`server/src/pokbot_server/sandbox.py`): `--runtime=runsc` (gVisor) via
-   `POKBOT_DOCKER_RUNTIME`; pinned `pokbot-py` / `pokbot-node` images with `pokbot_core` baked
-   in (drop the `core/src` mount); `--name pokbot-<tid>-<bot>` and
-   `--label pokbot.tournament=<tid>`; `docker rm -f` on close; orphan reaper at startup and on
-   a 5-minute systemd timer.
-5. **Abuse limits**: done: GitHub sign-in required for `/ws/play` and chat. To do: max 3 `/ws/play` and 5 `/ws/watch`
-   per IP/token; 5 uploads/hour and 3 bots per user; chat already rate-limited (5 per 10 s).
-   Client IPs forwarded by Vercel (`x-forwarded-for`) are spoofable, so token-based limits are
-   the real ones.
-
-## Vercel
-
-`vercel.json` at the repo root:
-
-```json
-{
-  "buildCommand": "sh scripts/build_site.sh",
-  "outputDirectory": "public",
-  "git": { "deploymentEnabled": { "main": false } },
-  "rewrites": [
-    { "source": "/api/:path*", "destination": "https://api.pokbot.dev/api/:path*" }
-  ],
-  "headers": [
-    { "source": "/install.sh", "headers": [
-      { "key": "Content-Type", "value": "text/x-shellscript; charset=utf-8" },
-      { "key": "Cache-Control", "value": "no-cache" } ] },
-    { "source": "/dist/(VERSION|SHA256SUMS)", "headers": [
-      { "key": "Cache-Control", "value": "no-cache" } ] },
-    { "source": "/dist/(.*)\\.whl", "headers": [
-      { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" } ] }
-  ]
-}
+```
+users ──https/wss──▶ Caddy :443 ──▶ pokbot-server 127.0.0.1:8000 ──▶ docker --runtime=runsc (bots)
+                     (Lightsail $12: 2 GB, 2 vCPU burst, 60 GB SSD, static IPv4)
 ```
 
-Project settings: production branch `release`; env `SITE=https://pokbot.dev`,
-`API=https://api.pokbot.dev`. DNS for `api` is an A record to the EC2 Elastic IP, managed in
-Vercel DNS. Hobby is non-commercial only; use Pro ($20/member) for anything commercial.
+Why this shape:
+- The server keeps the lobby, scheduler and chat in memory and holds websockets open for a
+  whole tournament, so it needs a long-running VM (not Lambda/Fargate/Vercel functions).
+- Uploaded bots are untrusted and run in Docker containers started by the server, which needs
+  a real Docker daemon on the host. The server runs on the host (not in a container) because
+  `sandbox.docker_argv` bind-mounts host paths.
+- Bots get 5 ms per decision and tournaments a 25-minute budget, so the box is idle most of the
+  half hour. A small burstable instance is enough; Lightsail throttles instead of billing when
+  burst credits run out, so there are no surprise charges.
 
-## AWS: Lightsail, not EC2
+## Files
 
-Bots get a 5 ms compute cap per decision and each tournament has a 25-minute budget, so the
-box sits idle most of the half hour and only needs short bursts. That fits a small burstable
-instance; no dedicated cores needed.
-
-- **Compute:** one AWS Lightsail Linux instance, **$12/month plan** (2 GB RAM, 2 vCPU burstable,
-  60 GB SSD, 3 TB transfer, public IPv4 included), Ubuntu 24.04. Move to the $24 plan (4 GB)
-  when concurrent containers or entrants grow. Lightsail bills a flat price: when burst credits
-  run out the CPU is throttled rather than billed, so there are no surprise charges.
-  Start with `POKBOT_MAX_CONTAINERS=2`.
-- **Server on the host, not in a container:** systemd runs `pokbot-server` as user `pokbot`
-  (in the `docker` group; root-equivalent, so treat the server as trusted).
-  `sandbox.docker_argv` bind-mounts host paths, which breaks inside a container.
-- **Sandbox:** Docker + gVisor (`runsc`) on the instance.
-- **Network:** Lightsail static IP (free while attached). Lightsail firewall: 80/443 open; 22
-  only from your own IP (or closed, using the Lightsail browser SSH).
-- **TLS:** Caddy on the instance (automatic ACME, websockets with no idle cutoff, per-IP rate
-  limits), proxying to `127.0.0.1:8000`. No load balancer.
-- **Secrets:** `/etc/pokbot/env` (0600) loaded with `EnvironmentFile=`. Never passed into bot
-  containers. Only `POKBOT_GITHUB_CLIENT_ID` is needed (device flow has no client secret).
-- **Backups:** Lightsail automatic daily snapshots (~$3/month for 60 GB) plus an hourly copy
-  of `data/` to an S3 bucket (cents).
-- **Monitoring:** Lightsail's built-in CPU/network metric alarms (free) and an external uptime
-  check on `https://pokbot.dev/install.sh` and `https://api.pokbot.dev/api/schedule`. Alert on
-  a tournament longer than 28 minutes from the server log.
-- **Not used:** EC2 `c7g.xlarge` (~$106/month; sized for unbounded compute that the 5 ms cap
-  removes), Fargate (no Docker/gVisor inside tasks), Lambda (15-minute cap, no long
-  websockets), ALB (~$18/month for one box).
-- **Even cheaper:** the $7 plan (1 GB) works for a soft launch with `POKBOT_MAX_CONTAINERS=1`.
-  Outside AWS, a Hetzner CAX11 (~€4/month) does the same job.
-
-## Deploy (pull-based; no inbound SSH from CI)
-
-1. GitHub Actions on a `v*` tag: `uv sync --frozen`, `ruff check`, `ruff format --check`,
-   `pytest -q`, and a sandbox job that builds the bot images and runs a real gVisor test.
-   It publishes the release tarball (repo + `uv.lock`) as a GitHub release asset.
-2. On the instance, a systemd timer (`pokbot-deploy.timer`, every 2 minutes) runs
-   `/opt/pokbot/deploy.sh`. It checks for a newer release, and only when `/api/schedule` reports
-   no running tournament and the next start is more than 5 minutes away it fetches the tarball,
-   verifies its checksum, `docker pull`s pinned images, runs `uv sync --frozen`, and
-   `systemctl restart pokbot`. It health-checks and rolls back to the previous release symlink
-   on failure.
-3. Pushing the tag commit to `release` makes Vercel build and deploy the site. Because the
-   server updates within minutes and the site deploys from the same tag, wheels and server
-   protocol stay in step. PRs get Vercel preview deploys.
-
-## Rollout
-
-**MVP, in order:**
-1. URL split (`install.sh`, `index.html`, both `config.py` files, `app.py`, `build_site.sh`,
-   `vercel.json`).
-2. `main.py` proxy settings.
-3. Container semaphore, bot time limit, match deadline.
-4. Container labels and orphan reaper.
-5. Rate limits and Origin checks.
-6. Lightsail instance, static IP, firewall, snapshots, S3 bucket; install Docker, gVisor,
-   Caddy and the deploy timer.
-7. Register the GitHub OAuth app (device flow on) and set `POKBOT_GITHUB_CLIENT_ID`.
-8. Vercel project and DNS.
-9. Tag workflow.
-10. Soft launch with `POKBOT_BOT_HANDS=2000`; raise to 10,000 once p95 tournament time is
-    under 15 minutes.
-
-**Later:** SQLite in place of `store.py`; separate runner instances behind a `RunnerClient` in `sandbox.make_player`; Redis pub/sub for `Hub.on_event`,
-lobby and chat fan-out, with a Redis `SET NX` leader for the scheduler, plus Postgres;
-Firecracker if gVisor overhead hurts; reconnect handling; hand logs in S3.
-
-## Monthly cost (MVP)
-
-| Item | Cost |
+| Path | What it does |
 |---|---|
-| Lightsail $12 plan (2 GB, 2 vCPU burst, 60 GB SSD, 3 TB transfer, IPv4) | $12 |
-| Lightsail automatic snapshots | ~$3 |
-| S3 backups of `data/` | < $1 |
-| Monitoring (Lightsail alarms + free uptime checker) | $0 |
-| Vercel Hobby (non-commercial) | $0 |
-| **Total** | **~$15/month** (~$10 on the $7 plan; +$20 if Vercel Pro is needed for commercial use) |
+| `scripts/aws/iam-policy.json` | Permissions the deploying IAM user needs (Lightsail + Budgets) |
+| `scripts/aws/provision.sh` | Creates key pair, instance (with `deploy/bootstrap.sh` as user-data), static IP, firewall, optional $1 budget alert. Idempotent. Prints the public host. |
+| `deploy/bootstrap.sh` | First boot: Docker, gVisor (`runsc`), Caddy, uv, `pokbot` user, base images, swap |
+| `scripts/aws/deploy.sh` | Ships committed `HEAD` + freshly built wheels; runs `remote_install.sh` over SSH |
+| `deploy/remote_install.sh` | Unpack release, `uv sync --frozen`, write `/etc/pokbot/env`, install units, switch `current`, restart, health-check, roll back on failure. Refuses while a tournament is running. Keeps 5 releases. |
+| `deploy/pokbot.service` | systemd unit: one `pokbot-server` process as user `pokbot` |
+| `deploy/Caddyfile` | TLS + reverse proxy (websockets, 21 MB uploads) |
+| `deploy/pokbot-reaper.{service,timer}` | Every 5 min, removes bot containers running longer than a slot |
 
-## Paying with AWS free credits
+## First deploy
 
-Checked October 2026; confirm on your own account (Billing → Credits, and the Lightsail
-pricing page) because third-party summaries disagree.
+1. **IAM permissions** for the deploying user (once):
+   ```
+   aws iam put-user-policy --user-name <you> --policy-name pokbot-deploy \
+     --policy-document file://scripts/aws/iam-policy.json
+   ```
+2. **GitHub OAuth app** (once): github.com → Settings → Developer settings → OAuth Apps →
+   New. Any homepage/callback URL; tick **Enable Device Flow**. Copy the **Client ID** (there
+   is no secret to copy; the device flow does not use one).
+3. **Provision** (~2 min, then ~5 min of first-boot setup on the instance):
+   ```
+   AWS_REGION=us-east-1 BUNDLE=small_3_0 POKBOT_ALERT_EMAIL=you@example.com scripts/aws/provision.sh
+   ```
+   It prints a host like `3-91-20-7.sslip.io` (sslip.io resolves it to the static IP, so Caddy
+   can get a Let's Encrypt certificate without a domain).
+4. **Deploy:**
+   ```
+   POKBOT_HOST=3-91-20-7.sslip.io POKBOT_GITHUB_CLIENT_ID=<client id> scripts/aws/deploy.sh
+   ```
+5. **Check:** `curl -fsSL https://<host>/install.sh | sh`, then `pokbot login`,
+   `pokbot schedule`, `pokbot chat`.
 
-- **New AWS accounts (created on or after 15 July 2025)** get $100 in Free Tier credits at
-  sign-up and can earn up to $100 more by completing onboarding activities (e.g. launching an
-  EC2 instance, trying Bedrock). Credits expire 12 months after account creation.
-- At sign-up you choose the **Free plan** or the **Paid plan**. The Free plan never charges a
-  card, but it ends after 6 months or when credits run out, and then the account is closed
-  unless you upgrade. **Pick the Paid plan for pokbot** (or upgrade before month 6): credits
-  still apply, and the server is not shut down at month 6.
-- **Lightsail adds 3 months free** on the $5, $7 and $12 Linux bundles (750 hours/month, one
-  instance), for accounts that started using Lightsail on or after 8 July 2021.
+Later deploys: commit, then `POKBOT_HOST=<host> scripts/aws/deploy.sh`. If a tournament is
+running it exits with code 75; run it again after the tournament.
 
-How far that goes with the plan above:
+## Own domain
 
-| Months | Lightsail $12 plan | Snapshots + S3 | Paid from |
+Point an A record (e.g. `pokbot.example`) at the static IP, then deploy with
+`POKBOT_HOST=pokbot.example`. Caddy gets the certificate; `/etc/pokbot/env` is updated with the
+new public URL, and new installs write it into the CLI config. Existing CLIs keep the old host
+until users run the installer again or edit `~/.config/pokbot/credentials`.
+
+## On the instance
+
+- Config: `/etc/pokbot/env` (`POKBOT_PUBLIC_URL`, `POKBOT_DATA=/var/lib/pokbot/data`,
+  `POKBOT_SANDBOX=docker`, `POKBOT_DOCKER_RUNTIME=runsc`, `POKBOT_MAX_PARALLEL_TABLES=1`,
+  `POKBOT_GITHUB_CLIENT_ID`). Edit, then `sudo systemctl restart pokbot`.
+- Logs: `journalctl -u pokbot -f`, `journalctl -u caddy`. First boot:
+  `/var/log/cloud-init-output.log`.
+- Data: `/var/lib/pokbot/data` (`state.json`, uploaded bots). Back it up (below).
+- SSH: `ssh -i ~/.ssh/pokbot-lightsail.pem ubuntu@<ip>`. Port 22 is open only to the IP that
+  ran `provision.sh`; re-run it to update after your IP changes.
+
+## Backups and alerts
+
+- Lightsail **automatic snapshots** (instance → Snapshots → enable daily; ~$3/month for 60 GB).
+- `provision.sh` with `POKBOT_ALERT_EMAIL` creates an AWS Budgets alert that emails when real
+  (non-credit) spend passes $1 in a month. Confirm the subscription email AWS sends.
+- Lightsail metric alarms (free): CPU and status-check alarms from the instance's Metrics tab.
+
+## Cost, paid from AWS free credits
+
+Checked October 2026; confirm in your account (Billing → Credits; Lightsail pricing page).
+
+- New AWS accounts (created on or after 15 July 2025) get $100 in credits at sign-up and up to
+  $100 more for onboarding activities; credits expire 12 months after account creation. Pick
+  the **Paid plan** (or upgrade before month 6): the Free plan closes the account after
+  6 months.
+- Lightsail gives **3 months free** on the $5, $7 and $12 Linux bundles (one instance).
+
+| Months | Lightsail $12 | Snapshots | Paid from |
 |---|---|---|---|
-| 1–3 | $0 (Lightsail free trial) | ~$4/month | credits |
-| 4–12 | $12/month | ~$4/month | credits (~$144 + $36 = ~$180 total for the year) |
-| 13+ | $12/month | ~$4/month | card (~$15/month) |
+| 1–3 | $0 (trial) | ~$3/month | credits |
+| 4–12 | $12/month | ~$3/month | credits (~$150 for the year) |
+| 13+ | $12/month | ~$3/month | card: **~$15/month** |
 
-So $200 of credits covers roughly the **first 12 months**. To stretch them, use the $7 plan
-(1 GB, `POKBOT_MAX_CONTAINERS=1`) for the soft launch and turn off automatic snapshots in
-favour of the free-ish hourly S3 copy.
+To stretch credits further: `BUNDLE=micro_3_0` ($7, 1 GB) for a soft launch. Startups can apply
+to AWS Activate for more credits.
 
-Guard rails, set up on day one:
-- An **AWS Budgets** alert at $1 of actual (non-credit) spend and another at 80% of credits
-  used, emailed to you.
-- Only Lightsail and one S3 bucket. Earning the extra $100 means briefly launching an EC2
-  instance for an onboarding activity; terminate it the same day.
-- Startups can also apply to **AWS Activate** (Founders tier: credits for self-funded
-  startups) once there is a company and a website.
+## Before going big
 
+- Rate limits per IP on `/api` and websocket connection counts (Caddy `rate_limit` plugin and
+  per-IP caps in `app.py`).
+- Pre-built bot images with `pokbot_core` baked in (replace the `core/src` mount).
+- SQLite instead of `data/state.json`; then separate runner instances for bot containers; then
+  Redis + Postgres to run more than one server process.
+- Reconnect-within-30 s for dropped live players; hand logs in S3.

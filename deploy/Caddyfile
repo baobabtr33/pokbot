@@ -1,0 +1,17 @@
+# {$POKBOT_HOST} comes from /etc/default/caddy (written by deploy/remote_install.sh).
+{$POKBOT_HOST} {
+	encode gzip
+
+	request_body {
+		max_size 21MB
+	}
+
+	# Everything (site, install.sh, /dist, /api, /ws) is served by pokbot-server.
+	reverse_proxy 127.0.0.1:8000 {
+		flush_interval -1
+	}
+
+	header /dist/VERSION Cache-Control "no-cache"
+	header /dist/SHA256SUMS Cache-Control "no-cache"
+	header /install.sh Cache-Control "no-cache"
+}

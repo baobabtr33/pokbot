@@ -1,0 +1,17 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "PokbotLightsail",
+      "Effect": "Allow",
+      "Action": "lightsail:*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "PokbotBudgetAlerts",
+      "Effect": "Allow",
+      "Action": ["budgets:ViewBudget", "budgets:ModifyBudget"],
+      "Resource": "*"
+    }
+  ]
+}
