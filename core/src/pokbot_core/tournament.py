@@ -29,6 +29,7 @@ class TournamentConfig:
     table_size: int = 6
     bot_hands: int = 10_000  # hands per table when every seat is a bot
     human_hands: int = 30  # hands per table when a human is seated
+    sets: int = 10  # bot tables: bot_hands split into this many sets; most sets won advances
     match: MatchConfig = field(default_factory=MatchConfig)
     seed: int | None = None
     budget_s: float | None = None  # wall-clock budget for the whole tournament; tables stop early
@@ -62,9 +63,12 @@ def rounds_needed(entrants: int, table_size: int) -> int:
 
 
 def rank_table(summary: dict, seated: list[Player]) -> list[int]:
-    """Indexes into `seated`, best first: chips won, then hands won, then seat order."""
+    """Indexes into `seated`, best first: sets won, then chips won, then hands won, then seat."""
     stats = summary["players"]
-    return sorted(range(len(seated)), key=lambda i: (-stats[i]["chips"], -stats[i]["wins"], i))
+    return sorted(
+        range(len(seated)),
+        key=lambda i: (-stats[i].get("sets_won", 0), -stats[i]["chips"], -stats[i]["wins"], i),
+    )
 
 
 class Tournament:
@@ -185,7 +189,9 @@ class Tournament:
         table_id = f"r{round_no}t{table_no + 1}"
         has_human = any(p.kind == "human" for p in seated)
         hands = self.config.human_hands if has_human else self.config.bot_hands
-        cfg = replace(self.config.match, hands=hands, seed=self.rng.getrandbits(63))
+        cfg = replace(
+            self.config.match, hands=hands, seed=self.rng.getrandbits(63), sets=1 if has_human else self.config.sets
+        )
 
         async def forward(event: dict) -> None:
             await self._emit({"type": "table", "table": table_id, "round": round_no, "event": event})

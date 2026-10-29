@@ -30,6 +30,9 @@ class MatchConfig:
     timebank_ms: int = 1000  # per-match reserve for GC pauses and cold starts
     human_time_ms: int = 60_000
     duplicate: bool = True  # heads-up only: replay each deck with seats swapped
+    # Split the match into equal sets of hands; whoever wins the most chips in a set wins it.
+    # Tables rank by sets won first (see tournament.rank_table). 1 = the whole match is one set.
+    sets: int = 1
 
 
 @dataclass
@@ -41,6 +44,7 @@ class PlayerStats:
     vpip: int = 0
     pfr: int = 0
     wins: int = 0
+    sets_won: int = 0
     illegal: int = 0
     timeouts: int = 0
     errors: int = 0
@@ -87,6 +91,9 @@ class Match:
         self.started_at = 0.0
         self._stop = False
         self.deadline = deadline  # time.monotonic() after which no new hand starts
+        self.sets_played = 0
+        self._set_base: list[int] = []  # each player's chips when the current set began
+        self._set_hands = 0
         self.stopped_early = False
 
     def stop(self) -> None:
@@ -131,10 +138,19 @@ class Match:
                     "game": cfg.game,
                     "players": [{"name": p.name, "kind": p.kind} for p in self.players],
                     "hands": cfg.hands,
+                    "sets": max(1, cfg.sets),
                     "blinds": list(cfg.blinds),
                     "seed": self.seed,
                 }
             )
+            sets = max(1, cfg.sets)
+            set_size = -(-cfg.hands // sets)  # ceil: the last set may be shorter
+            self._set_base = [0] * n
+            # With a deadline, each set also gets an equal slice of the time left, so every set is
+            # played even when the table can't fit all its hands: a set ends at `set_size` hands or
+            # at its slice, whichever comes first.
+            began = time.monotonic()
+            slice_s = (self.deadline - began) / sets if self.deadline is not None else None
             for hand_no in range(cfg.hands):
                 if self._stop:
                     break
@@ -146,6 +162,12 @@ class Match:
                 else:
                     base, order = hand_no, list(range(n))
                 await self._play_hand(hand_no, base, order)
+                self._set_hands += 1
+                out_of_time = slice_s is not None and time.monotonic() >= began + slice_s * (self.sets_played + 1)
+                if self._set_hands == set_size or (out_of_time and self.sets_played < sets - 1):
+                    await self._end_set()
+            if self._set_hands:  # stopped early or a short last set: it still counts
+                await self._end_set()
         finally:
             summary = self.summary()
             for p in self.players:
@@ -153,6 +175,28 @@ class Match:
             await self._emit({"type": "match_end", **summary})
             await asyncio.gather(*(p.close() for p in self.players), return_exceptions=True)
         return summary
+
+    async def _end_set(self) -> None:
+        """Close the current set: the most chips won in it wins (ties: every leader gets it)."""
+        won = [s.chips - b for s, b in zip(self.stats, self._set_base)]
+        best = max(won)
+        winners = [i for i, w in enumerate(won) if w == best]
+        for i in winners:
+            self.stats[i].sets_won += 1
+        self.sets_played += 1
+        self._set_base = [s.chips for s in self.stats]
+        hands, self._set_hands = self._set_hands, 0
+        await self._emit(
+            {
+                "type": "set_end",
+                "set": self.sets_played,
+                "sets": max(1, self.config.sets),
+                "hands": hands,
+                "winners": [self.stats[i].name for i in winners],
+                "chips": {s.name: w for s, w in zip(self.stats, won)},
+                "sets_won": {s.name: s.sets_won for s in self.stats},
+            }
+        )
 
     async def _play_hand(self, hand_no: int, base: int, order: list[int]) -> None:
         cfg = self.config
@@ -291,6 +335,7 @@ class Match:
             "seed": self.seed,
             "hands": self.hands_played,
             "stopped_early": self.stopped_early,
+            "sets": self.sets_played,
             "elapsed": round(elapsed, 3),
             "players": [s.to_dict(bb) for s in self.stats],
         }

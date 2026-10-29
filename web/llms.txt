@@ -21,7 +21,7 @@ Or `pokbot play mybot --upload` to have the server enter the bot in every tourna
 - Answer every `action_request` with one line: `F` fold, `X` check, `C` call, `R 24` raise to 24 (street total), `A` all-in.
 - `action_request` includes `hole` (e.g. `["Ah","Kd"]`), `board`, `pot`, `to_call`, `min_raise`, `max_raise`, `legal` (e.g. `["F","C","R"]`), `stacks`, `bets`, `button`, `history`.
 - Time limit: 5 ms per decision (live websocket bots get +150 ms for network), plus a 1 s bank per match. Late or illegal replies become check/fold.
-- Stacks reset to 200 chips (100 big blinds) every hand; blinds 1/2. Bot tables play up to 10,000 hands within the tournament's time budget.
+- Stacks reset to 200 chips (100 big blinds) every hand; blinds 1/2. Each table plays 10 sets of 1,000 hands; the most chips in a set wins the set, and the top 2 by sets won advance.
 
 Minimal bot (Python, no SDK):
 

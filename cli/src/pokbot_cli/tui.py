@@ -77,6 +77,9 @@ class TableState:
         self.deltas: list[int] = []
         self.totals: dict[str, int] = {}
         self.stats: dict[str, dict] = {}
+        self.sets_won: dict[str, int] = {}
+        self.set_no = 0
+        self.sets_total = 1
 
 
 class WinnerScreen(ModalScreen[None]):
@@ -274,7 +277,7 @@ class PokbotApp(App[str | None]):
 
     def on_mount(self) -> None:
         stats = self.query_one("#stats", DataTable)
-        stats.add_columns("Player", "Chips", "bb/100", "VPIP", "PFR")
+        stats.add_columns("Player", "Sets", "Chips", "bb/100", "VPIP", "PFR")
         self.set_interval(0.1, self._render)
         self.run_worker(self._run_source(), exclusive=True)
 
@@ -378,6 +381,7 @@ class PokbotApp(App[str | None]):
             t.players = [p["name"] for p in ev["players"]]
             t.kinds = {p["name"]: p["kind"] for p in ev["players"]}
             t.hands_total = ev["hands"]
+            t.sets_total, t.set_no, t.sets_won = ev.get("sets", 1), 0, {}
             t.totals = {n: 0 for n in t.players}
             if self.hero in t.players:
                 self.focus_table = table_id
@@ -414,6 +418,12 @@ class PokbotApp(App[str | None]):
             if focused and human_here:
                 self._dirty = True
                 await asyncio.sleep(1.6)
+        elif kind == "set_end":
+            t.sets_won, t.set_no, t.sets_total = ev["sets_won"], ev["set"], ev["sets"]
+            if focused and t.sets_total > 1:
+                won = ev["chips"][ev["winners"][0]]
+                who = ", ".join(f"[bold]{escape(w)}[/]" for w in ev["winners"])
+                self.log_line(f"[cyan]Set {ev['set']}/{ev['sets']}[/] → {who} (+{won} chips over {ev['hands']} hands)")
         elif kind == "match_end":
             t.stats = {p["name"]: p for p in ev["players"]}
             t.totals = {p["name"]: p["chips"] for p in ev["players"]}
@@ -588,12 +598,13 @@ class PokbotApp(App[str | None]):
         if t.showdown:
             info.append("  ·  " + "  ".join(f"{t.players[int(s)]}: {v['hand']}" for s, v in t.showdown.items()), style="bright_white")
         body = Group(Align.center(board), Align.center(info), Text(""), grid)
-        return Panel(body, title=f"[bold]Table {t.table_id}[/]", border_style="#2c6e49", style="on #0f2a1c")
+        sets = f" · set {min(t.set_no + 1, t.sets_total)}/{t.sets_total}" if t.sets_total > 1 else ""
+        return Panel(body, title=f"[bold]Table {t.table_id}[/]{sets}", border_style="#2c6e49", style="on #0f2a1c")
 
     def _update_stats(self, t: TableState) -> None:
         stats = self.query_one("#stats", DataTable)
         stats.clear()
-        rows = sorted(t.totals.items(), key=lambda kv: -kv[1])
+        rows = sorted(t.totals.items(), key=lambda kv: (-t.sets_won.get(kv[0], 0), -kv[1]))
         hands = max(t.hand_no + 1, 1)
         for name, chips in rows:
             s = t.stats.get(name, {})
@@ -601,4 +612,5 @@ class PokbotApp(App[str | None]):
             vpip = f"{s['vpip'] / s['hands']:.0%}" if s.get("hands") else "-"
             pfr = f"{s['pfr'] / s['hands']:.0%}" if s.get("hands") else "-"
             style = "bold #ffd75f" if name == self.hero else ""
-            stats.add_row(Text(name, style=style), f"{chips:+d}", f"{bb100:+.1f}", vpip, pfr)
+            sets = str(t.sets_won.get(name, 0)) if t.sets_total > 1 else "-"
+            stats.add_row(Text(name, style=style), sets, f"{chips:+d}", f"{bb100:+.1f}", vpip, pfr)

@@ -97,8 +97,10 @@ JSON `{"action":"R","amount":24}` also works. Cards are rank `23456789TJQKA` + s
 - **Tournament:** entrants are spread over tables of 6; the top 2 real entrants per table
   advance; the final table's best real entrant is champion. Empty seats get house bots named
   `[BOT] ...`; they never advance or score. Tournaments are bots only; humans play outside them.
-- **Ranking at a table:** chips won, then hands won. Bot tables play up to 10,000 hands; each
-  tournament has a 25-minute budget, so tables may stop earlier and rank on hands played.
+- **Sets:** each table plays 10 sets of 1,000 hands (10,000 in all). Whoever wins the most
+  chips in a set wins that set. Each tournament has a 25-minute budget; when a table can't fit
+  all its hands, every set still gets an equal share of the time, so all 10 sets are played.
+- **Ranking at a table:** most sets won, then chips won, then hands won.
 - **Points:** +1 entry, +10 per table advanced from, final-table places 100/60/40/30/20/10,
   other finalists 5.
 

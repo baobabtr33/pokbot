@@ -419,3 +419,44 @@ def test_old_cli_is_told_to_update(tmp_path, monkeypatch):
             seen = [ws.receive_json() for _ in range(3)]
             assert any(m["type"] == "info" and "too old" in m["message"] for m in seen)
         assert client.get("/api/version").json()["min_cli"] == "0.2.0"
+
+
+async def test_tables_play_sets_and_rank_by_sets_won():
+    from pokbot_core.tournament import rank_table
+
+    players = [HouseBot("a", "tight", 1), HouseBot("b", "caller", 2), HouseBot("c", "random", 3)]
+    events = []
+
+    async def sink(ev):
+        events.append(ev)
+
+    result = await Match(players, MatchConfig(hands=95, seed=5, sets=10), on_event=sink).run()
+    sets = [e for e in events if e["type"] == "set_end"]
+    assert [e["set"] for e in sets] == list(range(1, 11)) and result["sets"] == 10
+    assert [e["hands"] for e in sets] == [10] * 9 + [5]  # last set is the short remainder
+    assert sum(p["sets_won"] for p in result["players"]) >= 10  # ties credit every leader
+    for e in sets:
+        assert max(e["chips"].values()) == e["chips"][e["winners"][0]]
+    # Sets beat chips: a player with more sets ranks first even with fewer chips.
+    fake = {"players": [{"sets_won": 6, "chips": -50, "wins": 1}, {"sets_won": 4, "chips": 900, "wins": 9}]}
+    assert rank_table(fake, [None, None]) == [0, 1]
+
+
+async def test_every_set_is_played_when_the_table_runs_short_of_time():
+    import time as _time
+
+    class Slow(HouseBot):
+        async def act(self, msg):
+            await asyncio.sleep(0.002)
+            return await super().act(msg)
+
+    players = [Slow("a", "caller", 1), Slow("b", "tight", 2), Slow("c", "caller", 3)]
+    events = []
+
+    async def sink(ev):
+        events.append(ev)
+
+    match = Match(players, MatchConfig(hands=100_000, seed=1, sets=10), on_event=sink, deadline=_time.monotonic() + 1.0)
+    result = await match.run()
+    assert result["stopped_early"] and result["sets"] == 10
+    assert len([e for e in events if e["type"] == "set_end"]) == 10

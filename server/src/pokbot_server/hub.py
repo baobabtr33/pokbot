@@ -220,6 +220,7 @@ class Hub:
             table_size=settings.table_size,
             bot_hands=settings.bot_hands,
             human_hands=settings.human_hands,
+            sets=settings.sets,
             match=MatchConfig(time_ms=settings.time_ms, timebank_ms=settings.timebank_ms),
             budget_s=settings.budget_s,
             max_parallel_tables=settings.max_parallel_tables,

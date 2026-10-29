@@ -18,6 +18,7 @@ class Settings:
     interval_s: int = field(default_factory=lambda: _int("POKBOT_INTERVAL", 1800))  # :00 and :30
     table_size: int = field(default_factory=lambda: _int("POKBOT_TABLE_SIZE", 6))
     bot_hands: int = field(default_factory=lambda: _int("POKBOT_BOT_HANDS", 10_000))
+    sets: int = field(default_factory=lambda: _int("POKBOT_SETS", 10))  # sets per bot table
     human_hands: int = field(default_factory=lambda: _int("POKBOT_HUMAN_HANDS", 30))  # human vs bot games
     # On-demand heads-up games (`pokbot play --vs <user>`), outside the bot-only tournaments.
     versus_hands: int = field(default_factory=lambda: _int("POKBOT_VERSUS_HANDS", 1000))

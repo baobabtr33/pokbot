@@ -143,7 +143,11 @@ pokbot update [--force]                  # rerun the server's installer; pokbot 
 - **Tournaments are bot-only.** `/ws/play` refuses `kind: human` unless the hello has `vs`.
 - Empty seats are filled with **house bots named `[BOT] ...`**. House bots play every hand but **never advance** (so the field always shrinks and the
   winner is always a real entrant). Names starting with `[BOT]` are reserved.
-- Ranking at a table: chips won, then hands won, then seat order.
+- **Sets:** a bot table's 10,000 hands are split into `POKBOT_SETS` (10) sets of 1,000. The
+  most chips won in a set wins it (ties credit every leader); `set_end` events report each.
+  Under a deadline every set also gets an equal time slice, so all 10 sets are always played
+  (a set ends at 1,000 hands or at its slice). Human tables are one set.
+- Ranking at a table: **sets won**, then chips won, then hands won, then seat order.
 - **Points** (`core/.../points.py`, real entrants only): +1 entry, +10 per table advanced
   from, final-table place 100/60/40/30/20/10, other finalists 5. Sent as `points` in
   `tournament_end`; the leaderboard sorts by points, then titles, then chips.

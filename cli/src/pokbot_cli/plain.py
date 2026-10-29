@@ -47,7 +47,9 @@ class PlainPrinter:
             console.print(f"[bold cyan]{label}[/] · " + " | ".join(", ".join(t) for t in event["tables"]))
         elif kind == "table":
             ev = event["event"]
-            if ev["type"] == "hand_end" and (ev["hands_played"] % 1000 == 0):
+            if ev["type"] == "set_end" and ev["sets"] > 1:
+                console.print(f"  {event['table']}: set {ev['set']}/{ev['sets']} → {', '.join(ev['winners'])} (+{ev['chips'][ev['winners'][0]]})")
+            elif ev["type"] == "hand_end" and (ev["hands_played"] % 1000 == 0):
                 me = f" · {self.hero} {ev['totals'].get(self.hero, 0):+d}" if self.hero in ev["totals"] else ""
                 console.print(f"  {event['table']}: {ev['hands_played']} hands ({ev['hands_played'] / max(ev['elapsed'], 1e-9):,.0f}/s){me}")
             elif ev["type"] == "hand_end" and ev.get("human"):
@@ -55,10 +57,10 @@ class PlainPrinter:
                 console.print(f"  hand {ev['hand_no'] + 1}: {winners} · board {pretty_cards(ev['board'])}")
         elif kind == "table_end":
             table = Table(title=f"Table {event['table']}", show_edge=False)
-            for col in ("#", "Player", "Chips", "bb/100", "Illegal", "Timeouts", ""):
+            for col in ("#", "Player", "Sets", "Chips", "bb/100", "Illegal", "Timeouts", ""):
                 table.add_column(col)
             for s in event["standings"]:
-                table.add_row(str(s["place"]), s["name"], f"{s['chips']:+d}", f"{s['bb_per_100']:+.1f}",
+                table.add_row(str(s["place"]), s["name"], str(s.get("sets_won", "-")), f"{s['chips']:+d}", f"{s['bb_per_100']:+.1f}",
                               str(s["illegal"]), str(s["timeouts"]), "advances" if s["advances"] else "")
             console.print(table)
         elif kind == "versus_start":
