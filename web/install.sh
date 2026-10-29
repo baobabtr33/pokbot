@@ -103,10 +103,23 @@ if [ ! -f "$config_dir/credentials" ]; then
 fi
 ok "installed to $(tilde "$BIN_DIR")/pokbot"
 
+# `curl | sh` runs in a child shell and cannot change the caller's PATH, so prefer linking into a
+# user bin dir that is already on PATH: then `pokbot` works in this terminal right away.
+linked=""
+for dir in "$HOME/.local/bin" "$HOME/bin"; do
+  case ":$PATH:" in *":$dir:"*) ;; *) continue ;; esac
+  [ -d "$dir" ] && [ -w "$dir" ] || continue
+  target="$dir/pokbot"
+  if [ -e "$target" ] && [ "$(readlink "$target" 2>/dev/null)" != "$BIN_DIR/pokbot" ]; then continue; fi
+  ln -sf "$BIN_DIR/pokbot" "$target" && linked="$dir" && break
+done
+
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
   *)
-    if [ "${POKBOT_NO_MODIFY_PATH:-0}" != "1" ]; then
+    if [ -n "$linked" ]; then
+      ok "linked $(tilde "$linked")/pokbot ${D}(already on your PATH)${N}"
+    elif [ "${POKBOT_NO_MODIFY_PATH:-0}" != "1" ]; then
       case "${SHELL:-}" in
         */zsh)  rc="$HOME/.zshrc" ;;
         */bash) rc="$HOME/.bashrc" ;;
@@ -114,12 +127,19 @@ case ":$PATH:" in
       esac
       line="export PATH=\"$BIN_DIR:\$PATH\""
       grep -qsF "$line" "$rc" || printf '\n# pokbot\n%s\n' "$line" >> "$rc"
-      ok "added $(tilde "$BIN_DIR") to PATH in $(tilde "$rc") ${D}(open a new shell)${N}"
+      ok "added $(tilde "$BIN_DIR") to PATH in $(tilde "$rc")"
+      need_path=1
     else
-      printf '  add %s to your PATH\n' "$(tilde "$BIN_DIR")"
+      need_path=2
     fi
     ;;
 esac
+
+case "${need_path:-0}" in
+  1) printf ' \n%sthis terminal%s %s(new terminals already have it)%s\n' "$B" "$N" "$D" "$N" ;;
+  2) printf ' \n%sadd to your PATH%s\n' "$B" "$N" ;;
+esac
+if [ "${need_path:-0}" != "0" ]; then printf '  export PATH="%s:$PATH"\n' "$BIN_DIR"; fi
 
 printf ' \n%snext%s\n' "$B" "$N"
 printf '  %-22s %s\n' "pokbot login" "sign in with GitHub"
