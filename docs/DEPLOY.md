@@ -19,6 +19,20 @@ Why this shape:
   half hour. A small burstable instance is enough; Lightsail throttles instead of billing when
   burst credits run out, so there are no surprise charges.
 
+## Current deployment
+
+| | |
+|---|---|
+| URL | https://100-58-68-17.sslip.io |
+| Instance | Lightsail `pokbot`, us-east-1a, `small_3_0` ($12), Ubuntu 24.04 |
+| Static IP | `pokbot-ip` = 100.58.68.17 |
+| SSH key | Lightsail key pair `pokbot-deploy` → `~/.ssh/pokbot-lightsail.pem` |
+| IAM | inline policy `pokbot-deploy` on user `mac-2025` |
+| Budget | `pokbot-real-spend`: email when non-credit spend > $1/month |
+| GitHub login | not configured yet (`POKBOT_GITHUB_CLIENT_ID` unset) |
+
+Redeploy: `POKBOT_HOST=100-58-68-17.sslip.io scripts/aws/deploy.sh`
+
 ## Files
 
 | Path | What it does |
