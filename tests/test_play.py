@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -303,3 +304,24 @@ def test_build_pages(tmp_path):
     assert "<loc>https://someone.github.io/pokbot/llms.txt</loc>" in (tmp_path / "sitemap.xml").read_text()
     assert (tmp_path / "og.png").stat().st_size > 1000 and (tmp_path / ".nojekyll").exists()
     assert list(tmp_path.glob("google*.html")), "Search Console verification file must be published"
+
+
+def test_play_now_key_from_watch_and_after_tournament():
+    from pokbot_cli.tui import PokbotApp
+
+    async def idle(app):
+        await asyncio.sleep(3600)
+
+    async def scenario(practice, end_tournament):
+        app = PokbotApp(idle, hero="me", practice=practice)
+        async with app.run_test() as pilot:
+            if end_tournament:
+                app.result = {"winner": "me"}
+            await pilot.press("p")
+            await pilot.pause()
+            return app.return_value if not app.is_running else "still running"
+
+    assert asyncio.run(scenario("anytime", False)) == "practice"
+    assert asyncio.run(scenario("after", False)) == "still running"  # tournament not over yet
+    assert asyncio.run(scenario("after", True)) == "practice"
+    assert asyncio.run(scenario(None, True)) == "still running"  # local play: no key

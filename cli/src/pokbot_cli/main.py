@@ -152,6 +152,11 @@ def _play_local(files, hero, human, game, hands, table_size, seed, plain, as_jso
     return EXIT_OK
 
 
+def _practice(hero: str, game: str) -> None:
+    """A hand-played table against [BOT]s on this machine, available any time."""
+    _play_local([], hero, True, game, None, 6, None, False, False)
+
+
 def _play_online(target, hero, game, plain, as_json, server) -> int:
     url = config.server_url(server)
     token = config.token()
@@ -171,7 +176,9 @@ def _play_online(target, hero, game, plain, as_json, server) -> int:
                                        ask=None if bot else app.ask, game=game,
                                        on_ready=app.set_chat_sender)
 
-            PokbotApp(source, hero=hero, hero_is_human=bot is None, game=game).run()
+            app = PokbotApp(source, hero=hero, hero_is_human=bot is None, game=game, practice="after")
+            if app.run() == "practice":
+                _practice(hero, game)
             return EXIT_OK
         if bot is None:
             err.print("[red]playing yourself needs an interactive terminal[/]")
@@ -368,13 +375,19 @@ def chat(server: ServerOpt = None) -> None:
     async def source(app: PokbotApp) -> None:
         note = f"signed in as [bold]{name}[/]" if token else "not signed in: read-only (run [bold]pokbot login[/] to talk)"
         await app.handle({"type": "info", "message": f"connected to {url} · {note}"})
+        await app.handle({"type": "info", "message": "press [bold]p[/] any time to play a table yourself against [BOT]s"})
         await online.watch(url, token, app.handle, on_ready=app.set_chat_sender)
 
-    try:
-        PokbotApp(source, hero=name, title="pokbot chat").run()
-    except OSError as e:
-        err.print(f"[red]server error:[/] {e}")
-        raise typer.Exit(EXIT_SERVER) from None
+    # Watching never blocks playing: `p` leaves for a hand-played table, then comes back here.
+    while True:
+        try:
+            choice = PokbotApp(source, hero=name, title="pokbot chat", practice="anytime").run()
+        except OSError as e:
+            err.print(f"[red]server error:[/] {e}")
+            raise typer.Exit(EXIT_SERVER) from None
+        if choice != "practice":
+            return
+        _practice(name or getpass.getuser(), "holdem")
 
 
 app.command(name="watch", help="Alias for chat: spectate the running tournament.")(chat)

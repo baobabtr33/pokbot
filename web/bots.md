@@ -104,12 +104,15 @@ JSON `{"action":"R","amount":24}` also works. Cards are rank `23456789TJQKA` + s
 
 ## 5. Enter
 
+Practice opponents of increasing strength (fish, maniac, rock, tag, shark) are in
+[`bots/ladder`](https://github.com/baobabtr33/pokbot/tree/main/bots/ladder).
+
 ```
 pokbot validate mybot          # offline: loads, legal moves only, p99 under 5 ms
 pokbot play mybot --local      # practice against [BOT]s on your machine
 pokbot play mybot              # join the next tournament live (keep the terminal open)
 pokbot play mybot --upload     # or upload: entered in every tournament, runs sandboxed
-pokbot chat                    # lobby chat, who's online, watch the running tournament
+pokbot chat                    # lobby chat, who's online, watch; press p to play a table yourself
 pokbot leaderboard
 ```
 

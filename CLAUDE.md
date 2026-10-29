@@ -50,7 +50,8 @@ poker-bot-arena/
   web/                    # intro site (index.html, style.css, og.png), install.sh template,
                           # agent docs llms.txt + bots.md (all templated with __POKBOT_BASE__)
   scripts/build_dist.sh   # builds wheels + SHA256SUMS + VERSION into web/dist for the installer
-  bots/examples/          # caller.py, pairs.py, raw_bot.py (no SDK), broken.py (fails validation)
+  bots/examples/          # caller.py, pairs.py, tag.py, raw_bot.py (no SDK), broken.py (fails validation)
+  bots/ladder/            # l1_fish .. l5_shark: difficulty ladder; bench.py ranks them
   tests/
 ```
 
@@ -225,6 +226,9 @@ zip-slip checked in `bundle.unpack`.
 - Lobby countdown to the next :00/:30. `WinnerScreen`: ASCII WINNER banner + fireworks.
 - Renders at most every 100 ms; human tables are paced (0.45 s per action, 1.6 s after a hand).
 - Keys: `q` quit, `space` pause, `w` switch table. `--plain`/non-TTY uses `plain.py`.
+- **Play now:** `p` in `pokbot chat`/`watch` (any time) and in online play (after the
+  tournament ends) exits the app with `"practice"`; `main.py` then runs a hand-played local
+  table against [BOT]s and returns to watching. Players never have to wait for :00/:30.
 
 ## Engine correctness
 

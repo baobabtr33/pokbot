@@ -151,7 +151,7 @@ class WinnerScreen(ModalScreen[None]):
         self.query_one("#fireworks", Static).update(text)
 
 
-class PokbotApp(App[None]):
+class PokbotApp(App[str | None]):
     TITLE = "pokbot"
     CSS = """
     Screen { background: #0b1d13; }
@@ -182,10 +182,11 @@ class PokbotApp(App[None]):
         Binding("w", "next_table", "Switch table"),
         Binding("t", "chat", "Chat", show=False),
         Binding("escape", "leave_chat", "", show=False),
+        Binding("p", "practice", "Play now"),
     ]
 
     def __init__(self, source: Source, hero: str | None = None, hero_is_human: bool = False,
-                 game: str = "holdem", title: str = "pokbot") -> None:
+                 game: str = "holdem", title: str = "pokbot", practice: str | None = None) -> None:
         super().__init__()
         self.source = source
         self.hero = hero
@@ -207,6 +208,9 @@ class PokbotApp(App[None]):
         self.online: int | None = None
         self.playing: int | None = None
         self._chat_send = None
+        # "anytime" (watching) or "after" (online play, once the tournament is over): `p` exits
+        # with "practice" so the CLI can start a hand-played table against [BOT]s right away.
+        self.practice = practice
 
     # -- chat --------------------------------------------------------------------------------
 
@@ -234,6 +238,20 @@ class PokbotApp(App[None]):
 
     def action_leave_chat(self) -> None:
         self.set_focus(None)
+
+    # -- practice ----------------------------------------------------------------------------
+
+    def can_practice(self) -> bool:
+        return self.practice == "anytime" or (self.practice == "after" and self.result is not None)
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        if action == "practice":
+            return self.can_practice()
+        return True
+
+    def action_practice(self) -> None:
+        if self.can_practice() and not isinstance(self.focused, Input):
+            self.exit("practice")
 
     # -- layout ------------------------------------------------------------------------------
 
@@ -322,6 +340,9 @@ class PokbotApp(App[None]):
             ranked = sorted(event.get("points", {}).items(), key=lambda kv: -kv[1])
             if ranked:
                 self.log_line("Points: " + " · ".join(f"[bold]{escape(n)}[/] +{p}" for n, p in ranked))
+            if self.practice:
+                self.log_line("[bold green]press p to play a table yourself now[/] · next tournament at :00/:30")
+                self.refresh_bindings()
             await self.push_screen(WinnerScreen(winner, f"won tournament {event['tournament_id']} · {event['rounds']} round(s) · +{event.get('points', {}).get(winner, 0)} points"))
         elif kind == "match_end_local":
             self.status = "match finished"
@@ -508,6 +529,8 @@ class PokbotApp(App[None]):
             Align.center(Text("Next tournament starts in", style="#9fbfa8")),
             Align.center(Text(" ".join(clock.plain), style="bold #e8d9a0")),
             Align.center(Text(f"at {self.lobby_until.astimezone():%H:%M} · tournaments run every 30 minutes", style="#9fbfa8")),
+            *([Text(""), Align.center(Text("press p to play a table yourself while you wait", style="bold green"))]
+              if self.can_practice() else []),
         )
         return Panel(Align.center(body, vertical="middle"), border_style="#2c6e49", title="Lobby")
 
