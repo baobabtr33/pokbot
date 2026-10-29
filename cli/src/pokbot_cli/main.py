@@ -84,11 +84,27 @@ def _validate_or_exit(target: str, hands: int, game: str, quiet_json: bool = Fal
 
 
 @app.command()
+def submit(
+    file: Annotated[str, typer.Argument(help="Your bot: mybot.py, mybot.py:MyBot, ./mybot, bot.js or a folder with pokbot.toml.")],
+    name: Annotated[str | None, typer.Option("--name", "-n", help="Bot name after your login (default: the file name): alice-<name>.")] = None,
+    game: GameOpt = "holdem",
+    skip_validate: Annotated[bool, typer.Option("--skip-validate", help="Don't validate first.")] = False,
+    server: ServerOpt = None,
+) -> None:
+    """Submit a bot: it is validated, uploaded, and entered in every tournament (:00 and :30).
+    Submitting again with the same name replaces it."""
+    _check_game(game)
+    if not skip_validate:
+        _validate_or_exit(file, hands=200, game=game, quiet_json=False)
+    _do_upload(file, name or Path(file.split(":")[0]).stem, server)
+
+
+@app.command()
 def play(
     files: Annotated[list[str] | None, typer.Argument(help="Bot file(s): mybot.py, mybot.py:MyBot, ./mybot, bot.js or a folder with pokbot.toml. Omit to play by hand.")] = None,
     vs: Annotated[str | None, typer.Option("--vs", help="Heads-up now against this GitHub user's uploaded bot (or a bot name like alice-tag). With FILE: your bot plays it on the server; without: you play it by hand.")] = None,
     local: Annotated[bool, typer.Option("--local", help="Run the tournament on this machine against [BOT]s; no server.")] = False,
-    upload: Annotated[bool, typer.Option("--upload", help="Upload the bot; the server enters it in every tournament.")] = False,
+    upload: Annotated[bool, typer.Option("--upload", hidden=True, help="Same as `pokbot submit`.")] = False,
     name: Annotated[str | None, typer.Option("--name", "-n", help="Display name.")] = None,
     game: GameOpt = "holdem",
     hands: Annotated[int | None, typer.Option("--hands", help="Hands per table (--local only). Default 10,000 for bots, 30 with a human.")] = None,
@@ -99,13 +115,14 @@ def play(
     as_json: Annotated[bool, typer.Option("--json", help="Machine-readable results on stdout.")] = False,
     server: ServerOpt = None,
 ) -> None:
-    """Play poker. Tournaments are bot-only and start every 30 minutes.
+    """Play poker. Tournaments are bot-only (enter one with `pokbot submit`).
 
     \b
       pokbot play mybot.py             join the next tournament live
-      pokbot play mybot.py --upload    enter every tournament (server runs it)
       pokbot play mybot.py --vs alice  your bot vs alice's bot, heads-up, now
-      pokbot play                      you, by hand, vs [BOT]s on this machine
+      pokbot play                      you, by hand, at an open table (any time;
+                                       bots give up seats as people join)
+      pokbot play --local              you, by hand, vs [BOT]s on this machine
       pokbot play --vs alice           you, by hand, vs alice's bot
       pokbot play a.py b.py --local    bots vs each other on this machine
     """
@@ -140,7 +157,12 @@ def play(
         if files:  # the server plays both bots, so yours has to be uploaded first
             bot_name = _do_upload(files[0], name or Path(files[0].split(":")[0]).stem, server)
         raise typer.Exit(_play_online(None, hero, game, plain, as_json, server, vs=vs, bot_name=bot_name))
-    if human:  # tournaments are bot-only; by hand you play [BOT]s here, any time
+    if human and not local:
+        # Tournaments are bot-only; by hand you sit at an open table on the server, any time.
+        # House bots fill the seats and give them up as more people join.
+        if config.token():
+            raise typer.Exit(_play_online(None, hero, game, plain, as_json, server))
+        console.print("[dim]not signed in: playing [BOT]s on this machine (pokbot login to play people)[/]")
         local = True
     if local:
         code = _play_local(files, hero, human, game, hands, table_size, seed, plain, as_json)
@@ -187,8 +209,11 @@ def _play_local(files, hero, human, game, hands, table_size, seed, plain, as_jso
 
 
 def _practice(hero: str, game: str) -> None:
-    """A hand-played table against [BOT]s on this machine, available any time."""
-    _play_local([], hero, True, game, None, 6, None, False, False)
+    """Play by hand right now: an open table on the server when signed in, else [BOT]s locally."""
+    if config.token():
+        _play_online(None, hero, game, False, False, None)
+    else:
+        _play_local([], hero, True, game, None, 6, None, False, False)
 
 
 def _play_online(target, hero, game, plain, as_json, server, vs=None, bot_name=None) -> int:

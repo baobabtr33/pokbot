@@ -353,10 +353,12 @@ def test_tournaments_are_bot_only_and_versus_games_run_now(tmp_path, monkeypatch
                             headers={"Authorization": f"Bearer {tokens[owner]}"})
             assert r.status_code == 200, r.text
 
-        # Humans can't take a tournament seat.
+        # Humans can't take a tournament seat: they go to an open table instead.
+        entrants = client.get("/api/schedule").json()["entrants"]
         with client.websocket_connect(f"/ws/play?token={tokens['alice']}") as ws:
             ws.send_json({"type": "hello", "client": CLI, "kind": "human"})
-            assert "bot-only" in ws.receive_json()["message"]
+            assert "sat down" in ws.receive_json()["message"]
+            assert client.get("/api/schedule").json()["entrants"] == entrants
         # Unknown opponent fails fast.
         with client.websocket_connect(f"/ws/play?token={tokens['alice']}") as ws:
             ws.send_json({"type": "hello", "client": CLI, "kind": "human", "vs": "nobody"})
@@ -460,3 +462,62 @@ async def test_every_set_is_played_when_the_table_runs_short_of_time():
     result = await match.run()
     assert result["stopped_early"] and result["sets"] == 10
     assert len([e for e in events if e["type"] == "set_end"]) == 10
+
+
+def test_open_tables_seat_humans_any_time_and_evict_bots(tmp_path, monkeypatch):
+    import threading
+
+    import pokbot_server.app as server_app
+    from pokbot_server.config import Settings
+
+    cfg = Settings(data_dir=tmp_path, dev_login=True)
+    for mod in ("app", "hub", "games", "tables"):
+        monkeypatch.setattr(f"pokbot_server.{mod}.settings", cfg)
+
+    with TestClient(server_app.create_app(start_scheduler=False)) as client:
+        tokens = {n: client.post("/api/register", json={"name": n}).json()["token"] for n in ("ann", "ben")}
+        seen = {"ann": [], "ben": []}
+        stop = threading.Event()
+
+        def human(name, hands_wanted, ready):
+            with client.websocket_connect(f"/ws/play?token={tokens[name]}") as ws:
+                ws.send_json({"type": "hello", "kind": "human", "client": CLI})
+                hands = 0
+                while hands < hands_wanted and not stop.is_set():
+                    msg = ws.receive_json()
+                    if msg["type"] == "error":
+                        raise AssertionError(msg["message"])
+                    if msg["type"] == "action_request":
+                        ws.send_json({"type": "action", "reply": "X" if "X" in msg["legal"] else "C", "req": msg["req"]})
+                    elif msg["type"] == "event" and msg["event"]["type"] == "table":
+                        ev = msg["event"]["event"]
+                        seen[name].append(ev)
+                        if ev["type"] == "hand_start":
+                            ready.set()
+                        if ev["type"] == "hand_end":
+                            hands += 1
+
+        ann_ready, ben_ready = threading.Event(), threading.Event()
+        ann = threading.Thread(target=human, args=("ann", 12, ann_ready))
+        ann.start()
+        assert ann_ready.wait(10), "ann was never dealt in"
+        ben = threading.Thread(target=human, args=("ben", 4, ben_ready))
+        ben.start()
+        ben.join(30)
+        ann.join(30)
+        stop.set()
+        assert not ann.is_alive() and not ben.is_alive()
+
+        first = next(e for e in seen["ann"] if e["type"] == "hand_start")
+        assert first["players"].count("ann") == 1 and sum(p.startswith("[BOT]") for p in first["players"]) == 5
+        # ben replaced a house bot at ann's table between hands...
+        swaps = [e for e in seen["ann"] if e["type"] == "seat_change"]
+        assert any(e["in"] == "ben" and e["out"].startswith("[BOT]") for e in swaps)
+        both = [e for e in seen["ann"] if e["type"] == "hand_start" and "ben" in e["players"]]
+        assert both and sum(p.startswith("[BOT]") for p in both[0]["players"]) == 4
+        # ...and nobody sees anyone else's cards before showdown.
+        holes = dict(zip(both[0]["players"], both[0]["holes"]))
+        assert None not in holes["ann"] and holes["ben"] == [None, None]
+        # ...and when ben left, a house bot took the seat back.
+        assert any(e["out"] == "ben" and e["in"].startswith("[BOT]") for e in swaps)
+        assert client.get("/api/leaderboard").json()["players"] == []

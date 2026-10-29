@@ -95,9 +95,41 @@ class Match:
         self._set_base: list[int] = []  # each player's chips when the current set began
         self._set_hands = 0
         self.stopped_early = False
+        self._swaps: dict[int, Player] = {}
 
     def stop(self) -> None:
         self._stop = True
+
+    def swap(self, index: int, player: Player) -> None:
+        """Put `player` in seat `index` before the next hand (open tables: humans replace bots).
+        Stacks reset every hand, so a seat can change hands between hands without chip moves."""
+        self._swaps[index] = player
+
+    async def _apply_swaps(self) -> None:
+        swaps, self._swaps = self._swaps, {}
+        for i, new in swaps.items():
+            old = self.players[i]
+            await old.notify(message("match_end", result=self.summary()))
+            await old.close()
+            await new.start()
+            self.players[i] = new
+            self.stats[i] = PlayerStats(new.name, new.kind)
+            self.timebank[i] = self.config.timebank_ms
+            if self._set_base:
+                self._set_base[i] = 0
+            await new.notify(
+                message(
+                    "match_start",
+                    match_id=self.match_id,
+                    game=self.config.game,
+                    seat=i,
+                    players=self._names(list(range(len(self.players)))),
+                    hands=self.config.hands,
+                    starting_stack=self.config.stack,
+                    blinds=list(self.config.blinds),
+                )
+            )
+            await self._emit({"type": "seat_change", "seat": i, "out": old.name, "in": new.name, "kind": new.kind})
 
     async def _emit(self, event: dict) -> None:
         if self.on_event is None:
@@ -152,6 +184,8 @@ class Match:
             began = time.monotonic()
             slice_s = (self.deadline - began) / sets if self.deadline is not None else None
             for hand_no in range(cfg.hands):
+                if self._swaps:
+                    await self._apply_swaps()
                 if self._stop:
                     break
                 if self.deadline is not None and time.monotonic() >= self.deadline:

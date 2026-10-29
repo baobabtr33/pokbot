@@ -9,7 +9,7 @@ Guidance for Claude Code when working in this repository.
 Outside tournaments, anyone can **challenge another player's bot heads-up on demand** or
 **play by hand against bots** (see "On-demand games"). A bot enters either by **keeping a live websocket open** (`pokbot play mybot`)
 or by **uploading its code** so the server plays every tournament for it
-(`pokbot play mybot --upload`). The CLI shows the action live with dynamic terminal graphics
+(`pokbot submit mybot`, the main entry point). The CLI shows the action live with dynamic terminal graphics
 and a fireworks "WINNER" screen for the champion.
 
 Games: the four classic variants are registered — Texas Hold'em, Omaha, Seven-Card Stud,
@@ -72,7 +72,8 @@ POKBOT_INTERVAL=20 POKBOT_BOT_HANDS=1000 POKBOT_SANDBOX=unsafe-local uv run pokb
 uv run pokbot validate bots/examples/pairs.py
 uv run pokbot play bots/examples/pairs.py --local            # live TUI vs [BOT]s
 uv run pokbot play bots/examples/*.py --local --plain --hands 2000
-uv run pokbot play                                           # play by hand vs [BOT]s (local)
+uv run pokbot play --local                                   # play by hand vs [BOT]s (local)
+scripts/test.sh                                 # end-to-end: install, login, init, validate, submit, --vs, tournament
 ./scripts/build_dist.sh                         # rebuild installer wheels after changing core/cli
 ```
 
@@ -108,7 +109,8 @@ pokbot login
 ## The `pokbot` CLI
 
 ```
-pokbot play [FILE ...] [--vs USER] [--local] [--upload] [--name] [--hands N] [--table-size N] [--seed N] [--plain] [--json]
+pokbot submit FILE [--name N]            # validate + upload: entered in every tournament
+pokbot play [FILE ...] [--vs USER] [--local] [--name] [--hands N] [--table-size N] [--seed N] [--plain] [--json]
 pokbot validate FILE [--hands N] [--time-ms N] [--strict] [--json]
 pokbot init NAME [--lang py|js]
 pokbot chat | watch                      # lobby chat + who's online + spectate
@@ -125,8 +127,10 @@ pokbot update [--force]                  # rerun the server's installer; pokbot 
 
 - `FILE` = `mybot.py`, `mybot.py:ClassName`, `./executable`, `bot.js`, or a folder with
   `pokbot.toml` (`name`, `entrypoint`, `runtime` = python | node).
-- No FILE = you play by hand (TUI action bar): against [BOT]s on this machine, or with
-  `--vs USER` against that user's uploaded bot on the server. Never in a tournament.
+- No FILE = you play by hand (TUI action bar), never in a tournament: signed in, at an open
+  table on the server (`server/tables.py`); `--local` or signed out, against [BOT]s here;
+  `--vs USER`, against that user's uploaded bot. `play --upload` is a hidden alias of `submit`.
+- `submit` names the bot `<login>-<file stem>` unless `--name` is given.
 - `FILE --vs USER` uploads FILE (as `<login>-<stem>`, so it also enters tournaments) and asks
   the server to play it heads-up against USER's bot right away.
 - `play` validates every FILE first (200 hands) unless `--skip-validate`; it never queues a
@@ -218,6 +222,15 @@ JSON `{"action":"R","amount":24}` is also accepted. Lowercase is tolerated.
 - Events go only to the requester, wrapped like tournament table events (table `vs`), between
   `versus_start` and `versus_end` (`winner`, `result`). The opponent's hole cards are hidden;
   bot-vs-bot hands are down-sampled for display.
+
+## Open tables (`server/tables.py`)
+
+- Humans play any time: a `/ws/play` hello with `kind: human` and no `vs` sits you at an open
+  6-seat table. Tables with people fill first, so players meet. Empty seats hold house bots.
+- **Bots are evicted for people:** a joining player replaces a house bot between hands
+  (`Match.swap`, `seat_change` event); a leaving player's seat goes back to a house bot; the
+  table stops when no people remain. Stacks reset every hand, so swaps move no chips.
+- Never scored. Shares `POKBOT_MAX_HUMAN_GAMES` and the one-game-per-account rule with `--vs`.
 
 ## Chat and presence
 

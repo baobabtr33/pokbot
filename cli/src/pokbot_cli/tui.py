@@ -387,6 +387,11 @@ class PokbotApp(App[str | None]):
                 self.focus_table = table_id
         elif kind == "hand_start":
             t.players = ev["players"]
+            # Open tables: you may sit down mid-match and never see its match_start.
+            for n in t.players:
+                t.kinds.setdefault(n, "house" if n.startswith("[BOT]") else "human")
+            if self.focus_table is None and self.hero in t.players:
+                self.focus_table = table_id
             t.hand_no = ev["hand_no"]
             t.holes = ev["holes"]
             t.stacks, t.bets = ev["stacks"], ev["bets"]
@@ -418,6 +423,11 @@ class PokbotApp(App[str | None]):
             if focused and human_here:
                 self._dirty = True
                 await asyncio.sleep(1.6)
+        elif kind == "seat_change":
+            t.kinds.pop(ev["out"], None)
+            t.kinds[ev["in"]] = ev["kind"]
+            if focused:
+                self.log_line(f"[cyan]seat {ev['seat'] + 1}:[/] {escape(ev['in'])} replaces {escape(ev['out'])}")
         elif kind == "set_end":
             t.sets_won, t.set_no, t.sets_total = ev["sets_won"], ev["set"], ev["sets"]
             if focused and t.sets_total > 1:
@@ -543,7 +553,8 @@ class PokbotApp(App[str | None]):
         self.query_one("#table", Static).update(self._table_panel(t))
         self._update_stats(t)
         bar = self.query_one("#progress", ProgressBar)
-        bar.update(total=max(t.hands_total, 1), progress=t.hand_no + 1)
+        endless = t.hands_total >= 10**6  # open tables deal until everyone leaves
+        bar.update(total=None if endless else max(t.hands_total, 1), progress=t.hand_no + 1)
         self.query_one("#chart", Sparkline).data = list(self.hero_curve)
         label = f"{self.hero} chips: {int(self.hero_curve[-1]):+d}" if self.hero else "Chips"
         self.query_one("#chart-label", Static).update(label)

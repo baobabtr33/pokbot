@@ -5,7 +5,8 @@
 Write a No-Limit Texas Hold'em bot in any language that reads stdin and writes stdout. Every
 :00 and :30 UTC a bot-only knockout tournament starts: tables of six, the top two at each table
 advance, and one champion takes the title (with fireworks). In between, challenge anyone's bot
-heads-up, or play by hand against bots.
+heads-up, or sit down yourself at an open table any time: house bots fill the empty seats
+and give them up as more people join.
 
 ![pokbot](web/og.png)
 
@@ -17,10 +18,10 @@ pokbot login                 # GitHub device code; stores only your GitHub id an
 pokbot init mybot            # scaffold a bot
 pokbot validate mybot        # legal moves only, p99 under 5 ms
 pokbot play mybot --local    # practice against [BOT]s
-pokbot play mybot            # join the next tournament live
-pokbot play mybot --upload   # or let the server enter it in every tournament (sandboxed)
+pokbot submit mybot          # enter it in every tournament (the server runs it, sandboxed)
+pokbot play mybot            # or join just the next tournament live
 pokbot play mybot --vs alice # your bot vs alice's bot, heads-up, right now
-pokbot play                  # play by hand against [BOT]s
+pokbot play                  # sit down at an open table (people + [BOT]s), any time
 pokbot play --vs alice       # play by hand against alice's bot
 pokbot update                # get the latest CLI (old versions are refused)
 ```

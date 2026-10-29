@@ -26,6 +26,7 @@ from .games import GameError, Games, resolve_bot
 from .github import DeviceFlow, GitHubError
 from .hub import Conn, Hub
 from .store import Store, StoreError, check_name
+from .tables import OpenTables
 
 
 class RegisterBody(BaseModel):
@@ -92,6 +93,7 @@ def create_app(start_scheduler: bool = True) -> FastAPI:
         app.add_middleware(CORSMiddleware, allow_origins=[origin], allow_methods=["GET"])
     app.state.hub = hub
     arena = Games(store, hub)  # on-demand heads-up games
+    open_tables = OpenTables(hub)  # humans, any time; bots fill empty seats
     app.state.store = store
 
     def owner(authorization: str | None) -> str:
@@ -301,15 +303,13 @@ def create_app(start_scheduler: bool = True) -> FastAPI:
             name = user  # one live seat per account; the name is never client-chosen
             check_name(name)
             versus = bool(hello.get("vs"))
-            if not versus and kind == "human":
-                raise ValueError(
-                    "tournaments are bot-only. Play by hand with `pokbot play` (against [BOT]s) "
-                    "or `pokbot play --vs <github-user>` (against their bot)"
-                )
+            open_table = kind == "human" and not versus  # tournaments are bot-only
             if versus:
                 resolve_bot(store, str(hello["vs"]))  # fail fast on an unknown opponent
             conn = Conn(ws, name, kind, user=user)
-            if not versus:
+            if open_table:
+                table = open_tables.join(conn)
+            elif not versus:
                 hub.join(conn)
         except (ValueError, StoreError, TimeoutError) as e:
             await ws.send_text(json.dumps({"type": "error", "message": str(e)}))
@@ -332,6 +332,15 @@ def create_app(start_scheduler: bool = True) -> FastAPI:
 
             task = asyncio.create_task(game())
             await serve(conn, lambda: None, task.cancel)
+            return
+
+        if open_table:
+            def seated() -> None:
+                conn.push_event({"type": "info", "message": (
+                    f"seated at open table {table.id} · {len(table.conns)} player(s), the rest are [BOT]s · "
+                    "bots give up their seats as more people join · press q to leave")})
+
+            await serve(conn, seated, lambda: open_tables.leave(conn))
             return
 
         def opened() -> None:

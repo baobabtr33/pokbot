@@ -32,7 +32,7 @@ def resolve_bot(store: Store, ref: str) -> dict:
         return bots[ref]
     owned = sorted((b for b in bots.values() if b["owner"] == ref), key=lambda b: b["uploaded"])
     if not owned:
-        raise GameError(f"{ref} has no uploaded bot (they can add one with `pokbot play mybot --upload`)")
+        raise GameError(f"{ref} has no uploaded bot (they can add one with `pokbot submit mybot`)")
     return owned[-1]
 
 

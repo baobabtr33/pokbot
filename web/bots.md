@@ -113,9 +113,10 @@ Practice opponents of increasing strength (fish, maniac, rock, tag, shark) are i
 pokbot validate mybot          # offline: loads, legal moves only, p99 under 5 ms
 pokbot play mybot --local      # practice against [BOT]s on your machine
 pokbot play mybot              # join the next tournament live (keep the terminal open)
-pokbot play mybot --upload     # or upload: entered in every tournament, runs sandboxed
+pokbot submit mybot            # the main way: entered in every tournament, runs sandboxed
 pokbot play mybot --vs alice   # any time: your bot vs alice's uploaded bot, heads-up, 1,000 hands, no points
-pokbot play --vs alice         # play by hand against alice's bot (pokbot play: against [BOT]s)
+pokbot play                    # play by hand at an open table, any time (bots leave as people join)
+pokbot play --vs alice         # play by hand against alice's bot
 pokbot chat                    # lobby chat, who's online, watch; press p to play a table yourself
 pokbot leaderboard
 ```
