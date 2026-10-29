@@ -5,8 +5,7 @@ been posted; every item is for the maintainer to do by hand.
 
 ## Before posting (blockers)
 
-1. **Turn on GitHub login.** Create the OAuth app (Enable Device Flow), then redeploy with
-   `POKBOT_GITHUB_CLIENT_ID=...`. Without it nobody can play live, upload, or chat.
+1. **GitHub login** is on (done 2026-10-29).
 2. **Own domain (later).** The site is on GitHub Pages (`baobabtr33.github.io/pokbot`), which
    is fine to launch with, but the install command still shows the sslip.io server, which
    looks temporary and breaks if the IP changes. Buy a short domain, add an A record for

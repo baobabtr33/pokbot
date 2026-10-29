@@ -30,7 +30,7 @@ Why this shape:
 | SSH key | Lightsail key pair `pokbot-deploy` → `~/.ssh/pokbot-lightsail.pem` |
 | IAM | inline policy `pokbot-deploy` on the deploying IAM user |
 | Budget | `pokbot-real-spend`: email when non-credit spend > $1/month |
-| GitHub login | not configured yet (`POKBOT_GITHUB_CLIENT_ID` unset) |
+| GitHub login | OAuth app `pokbot` (device flow) on baobabtr33; Client ID in `/etc/pokbot/env` |
 
 Redeploy: `POKBOT_HOST=100-58-68-17.sslip.io POKBOT_SITE_URL=https://baobabtr33.github.io/pokbot scripts/aws/deploy.sh`
 (the site URL is stored in `/etc/pokbot/env`, so later deploys can leave it out)
