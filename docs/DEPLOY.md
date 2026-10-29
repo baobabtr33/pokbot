@@ -23,15 +23,17 @@ Why this shape:
 
 | | |
 |---|---|
-| URL | https://100-58-68-17.sslip.io |
+| Site | https://baobabtr33.github.io/pokbot (GitHub Pages) |
+| Game server | https://100-58-68-17.sslip.io (API, websockets, installer) |
 | Instance | Lightsail `pokbot`, us-east-1a, `small_3_0` ($12), Ubuntu 24.04 |
 | Static IP | `pokbot-ip` = 100.58.68.17 |
 | SSH key | Lightsail key pair `pokbot-deploy` → `~/.ssh/pokbot-lightsail.pem` |
-| IAM | inline policy `pokbot-deploy` on user `mac-2025` |
+| IAM | inline policy `pokbot-deploy` on the deploying IAM user |
 | Budget | `pokbot-real-spend`: email when non-credit spend > $1/month |
 | GitHub login | not configured yet (`POKBOT_GITHUB_CLIENT_ID` unset) |
 
-Redeploy: `POKBOT_HOST=100-58-68-17.sslip.io scripts/aws/deploy.sh`
+Redeploy: `POKBOT_HOST=100-58-68-17.sslip.io POKBOT_SITE_URL=https://baobabtr33.github.io/pokbot scripts/aws/deploy.sh`
+(the site URL is stored in `/etc/pokbot/env`, so later deploys can leave it out)
 
 ## Files
 
@@ -71,6 +73,21 @@ Redeploy: `POKBOT_HOST=100-58-68-17.sslip.io scripts/aws/deploy.sh`
 
 Later deploys: commit, then `POKBOT_HOST=<host> scripts/aws/deploy.sh`. If a tournament is
 running it exits with code 75; run it again after the tournament.
+
+## Static site on GitHub Pages
+
+The site pages (`index.html`, `llms.txt`, `bots.md`, `og.png`, sitemap) are also published to
+GitHub Pages by `.github/workflows/pages.yml` on every push to `main` that touches `web/`.
+`scripts/build_pages.py` fills `__POKBOT_SITE__` with the Pages URL and `__POKBOT_BASE__` with
+the game server (`POKBOT_API` in the workflow). The installer, wheels, API and websockets stay
+on the server.
+
+Deploy the server with `POKBOT_SITE_URL=<pages url>` once Pages is live: the server's `/`,
+`/llms.txt`, `/bots.md` and `/sitemap.xml` then 301 to Pages (one canonical copy for search
+engines), and `/api` allows cross-origin GETs from the Pages origin so the homepage can show
+the schedule, online count and leaderboard. `POKBOT_SITE_URL=none` undoes it.
+
+Setup (once): repo Settings, Pages, Source: GitHub Actions.
 
 ## Own domain
 

@@ -4,7 +4,7 @@
 # Unpacks a release, installs deps, switches the `current` symlink, restarts, health-checks,
 # and rolls back on failure. Refuses to restart while a tournament is running.
 set -eu
-REL="$1"; TARBALL="$2"; HOST="$3"; GITHUB_CLIENT_ID="${4:-}"
+REL="$1"; TARBALL="$2"; HOST="$3"; GITHUB_CLIENT_ID="${4:-}"; SITE_URL="${5:-}"
 ROOT=/opt/pokbot
 DIR="$ROOT/releases/$REL"
 
@@ -41,6 +41,8 @@ setenv POKBOT_SANDBOX docker
 setenv POKBOT_DOCKER_RUNTIME runsc
 setenv POKBOT_MAX_PARALLEL_TABLES 1
 if [ -n "$GITHUB_CLIENT_ID" ]; then setenv POKBOT_GITHUB_CLIENT_ID "$GITHUB_CLIENT_ID" force; fi
+if [ "$SITE_URL" = none ]; then sed -i "/^POKBOT_SITE_URL=/d" "$ENVF"
+elif [ -n "$SITE_URL" ]; then setenv POKBOT_SITE_URL "$SITE_URL" force; fi
 chown root:pokbot /etc/pokbot/env; chmod 640 /etc/pokbot/env
 
 install -m 644 "$DIR/deploy/pokbot.service" /etc/systemd/system/pokbot.service

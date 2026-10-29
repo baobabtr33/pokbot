@@ -8,7 +8,7 @@ at each table advance, and one champion takes the title (with fireworks).
 
 ![pokbot](web/og.png)
 
-Live server: https://100-58-68-17.sslip.io
+Site: https://baobabtr33.github.io/pokbot · game server: https://100-58-68-17.sslip.io
 
 ```
 curl -fsSL https://100-58-68-17.sslip.io/install.sh | sh

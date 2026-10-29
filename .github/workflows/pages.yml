@@ -1,0 +1,37 @@
+name: pages
+
+on:
+  push:
+    branches: [main]
+    paths: ["web/**", "scripts/build_pages.py", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+env:
+  # Game server: installer, API, websockets. Change when the server moves to its own domain.
+  POKBOT_API: https://100-58-68-17.sslip.io
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: pages
+        uses: actions/configure-pages@v5
+      - run: python3 scripts/build_pages.py --site "${{ steps.pages.outputs.base_url }}" --api "$POKBOT_API" --out public
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -11,7 +11,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import PlainTextResponse, Response
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pokbot_core.bundle import MAX_BUNDLE_BYTES, BundleError, unpack
 from pokbot_core.engine.variants import VARIANTS, get_variant
@@ -37,6 +38,17 @@ def every(seconds: int) -> str:
     return f"{seconds // 60} minutes" if seconds >= 60 else f"{seconds} seconds"
 
 
+SITE_PAGES = ("/", "/bots.md", "/llms.txt")
+
+
+def sitemap_xml(site: str) -> str:
+    urls = "".join(f"<url><loc>{site}{p}</loc></url>" for p in SITE_PAGES)
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>\n'
+    )
+
+
 def create_app(start_scheduler: bool = True) -> FastAPI:
     store = Store(settings.data_dir)
     hub = Hub(store)
@@ -51,6 +63,10 @@ def create_app(start_scheduler: bool = True) -> FastAPI:
                 await task
 
     app = FastAPI(title="pokbot", lifespan=lifespan)
+    if settings.site_url:
+        # The static site reads schedule, presence and leaderboard; nothing else is cross-origin.
+        origin = "/".join(settings.site_url.split("/")[:3])
+        app.add_middleware(CORSMiddleware, allow_origins=[origin], allow_methods=["GET"])
     app.state.hub = hub
     app.state.store = store
 
@@ -95,13 +111,23 @@ def create_app(start_scheduler: bool = True) -> FastAPI:
     def base_url(request: Request) -> str:
         return (settings.public_url or str(request.base_url)).rstrip("/")
 
+    def site_url(request: Request) -> str:
+        return settings.site_url or base_url(request)
+
     def render(request: Request, filename: str, media_type: str) -> Response:
-        """Serve a web/ file with __POKBOT_BASE__ replaced by the public URL."""
+        """Serve a web/ file with __POKBOT_SITE__ / __POKBOT_BASE__ replaced by the public URLs."""
         path = settings.web_dir / filename
         if not path.is_file():
             raise HTTPException(404, "not found")
-        text = path.read_text().replace("__POKBOT_BASE__", base_url(request))
-        return Response(text, media_type=media_type)
+        text = path.read_text().replace("__POKBOT_SITE__", site_url(request))
+        return Response(text.replace("__POKBOT_BASE__", base_url(request)), media_type=media_type)
+
+    def page(request: Request, filename: str, media_type: str) -> Response:
+        # One canonical copy for search engines: send visitors to the static site when there is one.
+        if settings.site_url:
+            target = settings.site_url + ("/" if filename == "index.html" else f"/{filename}")
+            return RedirectResponse(target, status_code=301)
+        return render(request, filename, media_type)
 
     @app.get("/install.sh", response_class=PlainTextResponse)
     def install_script(request: Request) -> Response:
@@ -111,30 +137,26 @@ def create_app(start_scheduler: bool = True) -> FastAPI:
     @app.get("/", include_in_schema=False)
     @app.get("/index.html", include_in_schema=False)
     def index(request: Request) -> Response:
-        return render(request, "index.html", "text/html; charset=utf-8")
+        return page(request, "index.html", "text/html; charset=utf-8")
 
     @app.get("/llms.txt", include_in_schema=False)
     def llms_txt(request: Request) -> Response:
-        return render(request, "llms.txt", "text/plain; charset=utf-8")
+        return page(request, "llms.txt", "text/plain; charset=utf-8")
 
     @app.get("/bots.md", include_in_schema=False)
     def bots_md(request: Request) -> Response:
-        return render(request, "bots.md", "text/markdown; charset=utf-8")
+        return page(request, "bots.md", "text/markdown; charset=utf-8")
 
     @app.get("/robots.txt", include_in_schema=False)
     def robots(request: Request) -> Response:
-        text = f"User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: {base_url(request)}/sitemap.xml\n"
+        text = f"User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: {site_url(request)}/sitemap.xml\n"
         return Response(text, media_type="text/plain; charset=utf-8")
 
     @app.get("/sitemap.xml", include_in_schema=False)
     def sitemap(request: Request) -> Response:
-        base = base_url(request)
-        urls = "".join(f"<url><loc>{base}{p}</loc></url>" for p in ("/", "/bots.md", "/llms.txt"))
-        text = (
-            '<?xml version="1.0" encoding="UTF-8"?>\n'
-            f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>\n'
-        )
-        return Response(text, media_type="application/xml")
+        if settings.site_url:
+            return RedirectResponse(settings.site_url + "/sitemap.xml", status_code=301)
+        return Response(sitemap_xml(site_url(request)), media_type="application/xml")
 
     @app.post("/api/register")
     def register(body: RegisterBody) -> dict:

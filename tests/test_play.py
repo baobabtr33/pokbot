@@ -265,3 +265,40 @@ def test_seo_and_agent_pages_use_public_url(tmp_path, monkeypatch):
         assert "<loc>https://pokbot.example/bots.md</loc>" in client.get("/sitemap.xml").text
         assert client.get("/style.css").status_code == 200
         assert client.get("/openapi.json").status_code == 200
+
+
+def test_static_site_redirects_and_cors(tmp_path, monkeypatch):
+    import pokbot_server.app as server_app
+    from pokbot_server.config import Settings
+
+    site = "https://someone.github.io/pokbot"
+    monkeypatch.setattr(
+        server_app,
+        "settings",
+        Settings(data_dir=tmp_path, public_url="https://api.example", site_url=site),
+    )
+    with TestClient(server_app.create_app(start_scheduler=False)) as client:
+        for path, target in (("/", site + "/"), ("/llms.txt", site + "/llms.txt"), ("/sitemap.xml", site + "/sitemap.xml")):
+            r = client.get(path, follow_redirects=False)
+            assert r.status_code == 301 and r.headers["location"] == target, path
+        script = client.get("/install.sh").text
+        assert 'BASE="${POKBOT_BASE:-https://api.example}"' in script
+        r = client.get("/api/schedule", headers={"Origin": "https://someone.github.io"})
+        assert r.headers["access-control-allow-origin"] == "https://someone.github.io"
+        r = client.get("/api/schedule", headers={"Origin": "https://evil.example"})
+        assert "access-control-allow-origin" not in r.headers
+
+
+def test_build_pages(tmp_path):
+    import runpy
+
+    build = runpy.run_path(str(Path(__file__).parent.parent / "scripts" / "build_pages.py"))["build"]
+    build("https://someone.github.io/pokbot/", "https://api.example", tmp_path)
+    page = (tmp_path / "index.html").read_text()
+    assert "__POKBOT" not in page
+    assert '<link rel="canonical" href="https://someone.github.io/pokbot/"' in page
+    assert "curl -fsSL <span class=\"origin\">https://api.example</span>/install.sh" in page
+    assert 'const API = "https://api.example".startsWith("__")' in page
+    assert "https://someone.github.io/pokbot/bots.md" in (tmp_path / "llms.txt").read_text()
+    assert "<loc>https://someone.github.io/pokbot/llms.txt</loc>" in (tmp_path / "sitemap.xml").read_text()
+    assert (tmp_path / "og.png").stat().st_size > 1000 and (tmp_path / ".nojekyll").exists()

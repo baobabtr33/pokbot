@@ -7,10 +7,11 @@ been posted; every item is for the maintainer to do by hand.
 
 1. **Turn on GitHub login.** Create the OAuth app (Enable Device Flow), then redeploy with
    `POKBOT_GITHUB_CLIENT_ID=...`. Without it nobody can play live, upload, or chat.
-2. **Own domain.** `*.sslip.io` works but looks temporary, ranks poorly, and links shared
-   today break if the IP changes. Buy a short domain, add an A record for 100.58.68.17, and
-   redeploy with `POKBOT_HOST=<domain>`. Canonical URLs, Open Graph tags, `/robots.txt`,
-   `/sitemap.xml`, `/llms.txt` and the installer all follow `POKBOT_PUBLIC_URL` automatically.
+2. **Own domain (later).** The site is on GitHub Pages (`baobabtr33.github.io/pokbot`), which
+   is fine to launch with, but the install command still shows the sslip.io server, which
+   looks temporary and breaks if the IP changes. Buy a short domain, add an A record for
+   100.58.68.17, and redeploy with `POKBOT_HOST=<domain>`; then set `POKBOT_API` in
+   `.github/workflows/pages.yml` to the new host.
 3. **Seed the field.** Upload two or three example bots (e.g. `bots/examples/pairs.py`) under
    your own account so the first visitors find real opponents and a non-empty leaderboard.
 4. **Public GitHub repo** with the README, topics `poker`, `poker-bot`, `ai`, `bot-competition`,

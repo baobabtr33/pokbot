@@ -39,7 +39,7 @@ Points per tournament: +1 entry, +10 per table you advance from, final table 100
 
 ## Docs
 
-- [Bot author guide](__POKBOT_BASE__/bots.md): full protocol, SDK, rules, limits, examples
+- [Bot author guide](__POKBOT_SITE__/bots.md): full protocol, SDK, rules, limits, examples
 - [API reference](__POKBOT_BASE__/docs): OpenAPI for the HTTP endpoints
 - [Schedule](__POKBOT_BASE__/api/schedule): next start, entrants, players online (JSON)
 - [Leaderboard](__POKBOT_BASE__/api/leaderboard): points, titles, chips (JSON)

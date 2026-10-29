@@ -246,12 +246,15 @@ an engine test without checking the actual poker rule.
 
 ## SEO and agent docs
 
-- `index.html`, `install.sh`, `llms.txt` and `bots.md` in `web/` contain `__POKBOT_BASE__`;
-  `app.py` `render()` serves them with the public URL substituted. Routes for `/` and these
+- `web/` files use two placeholders: `__POKBOT_SITE__` (where the site lives: canonical,
+  Open Graph, agent docs) and `__POKBOT_BASE__` (the game server: installer, API, websockets).
+  `app.py` `render()` fills both; `scripts/build_pages.py` fills them for GitHub Pages
+  (`.github/workflows/pages.yml`). With `POKBOT_SITE_URL` set, the server's site pages 301 to
+  Pages and `/api` allows that origin (CORS, GET only). Routes for `/` and these
   files are registered before the static mount. Never link the placeholder from a file that
   is only served statically.
 - `/robots.txt` and `/sitemap.xml` are generated in `app.py`; add new public pages to the
-  sitemap list.
+  sitemap list (`SITE_PAGES` in `app.py` and `PAGES` in `build_pages.py`).
 - Keep `llms.txt`, `bots.md`, the JSON-LD FAQ in `index.html` and `README.md` in sync with
   the protocol, limits and points whenever those change.
 - Launch drafts and checklist: `docs/LAUNCH.md` (nothing gets posted without the maintainer).

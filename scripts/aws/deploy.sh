@@ -1,7 +1,10 @@
 #!/bin/sh
 # Ship the committed HEAD (plus freshly built installer wheels) to the Lightsail instance.
 #
-#   POKBOT_HOST=1-2-3-4.sslip.io [POKBOT_GITHUB_CLIENT_ID=Iv1...] scripts/aws/deploy.sh
+#   POKBOT_HOST=1-2-3-4.sslip.io [POKBOT_GITHUB_CLIENT_ID=Iv1...] [POKBOT_SITE_URL=https://...] scripts/aws/deploy.sh
+#
+# POKBOT_SITE_URL: the static site (GitHub Pages); the server's own pages then redirect there.
+# Use "none" to go back to serving the site from this server.
 set -eu
 cd "$(dirname "$0")/../.."
 
@@ -23,7 +26,7 @@ echo "✓ built release $REL ($(du -h "$tmp/release.tar.gz" | cut -f1))"
 
 scp -q -i "$KEY_FILE" -o StrictHostKeyChecking=accept-new "$tmp/release.tar.gz" "ubuntu@$IP:/tmp/pokbot-$REL.tar.gz"
 # The GitHub OAuth client id is public (device flow has no secret) but kept out of the repo.
-$SSH "sudo sh -s -- $REL /tmp/pokbot-$REL.tar.gz $HOST ${POKBOT_GITHUB_CLIENT_ID:-}" < deploy/remote_install.sh
+$SSH "sudo sh -s -- $REL /tmp/pokbot-$REL.tar.gz $HOST '${POKBOT_GITHUB_CLIENT_ID:-}' '${POKBOT_SITE_URL:-}'" < deploy/remote_install.sh
 
 echo "✓ live: https://$HOST"
 echo "  install: curl -fsSL https://$HOST/install.sh | sh"
