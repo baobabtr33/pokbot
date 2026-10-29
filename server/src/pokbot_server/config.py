@@ -18,7 +18,13 @@ class Settings:
     interval_s: int = field(default_factory=lambda: _int("POKBOT_INTERVAL", 1800))  # :00 and :30
     table_size: int = field(default_factory=lambda: _int("POKBOT_TABLE_SIZE", 6))
     bot_hands: int = field(default_factory=lambda: _int("POKBOT_BOT_HANDS", 10_000))
-    human_hands: int = field(default_factory=lambda: _int("POKBOT_HUMAN_HANDS", 30))
+    human_hands: int = field(default_factory=lambda: _int("POKBOT_HUMAN_HANDS", 30))  # human vs bot games
+    # On-demand heads-up games (`pokbot play --vs <user>`), outside the bot-only tournaments.
+    versus_hands: int = field(default_factory=lambda: _int("POKBOT_VERSUS_HANDS", 1000))
+    versus_budget_s: int = field(default_factory=lambda: _int("POKBOT_VERSUS_BUDGET_S", 120))
+    human_game_budget_s: int = field(default_factory=lambda: _int("POKBOT_HUMAN_GAME_BUDGET_S", 1200))
+    max_bot_games: int = field(default_factory=lambda: _int("POKBOT_MAX_BOT_GAMES", 1))
+    max_human_games: int = field(default_factory=lambda: _int("POKBOT_MAX_HUMAN_GAMES", 20))
     # Bot decision cap: a few ms of compute per action. Live websocket bots also get a network
     # allowance, since round-trip latency is not compute.
     time_ms: int = field(default_factory=lambda: _int("POKBOT_TIME_MS", 5))

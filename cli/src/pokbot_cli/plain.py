@@ -25,9 +25,9 @@ class PlainPrinter:
 
     async def handle(self, event: dict) -> None:
         if self.as_json:
-            if event["type"] in ("tournament_end", "table_end", "validate"):
+            if event["type"] in ("tournament_end", "table_end", "validate", "versus_end"):
                 sys.stdout.write(json.dumps(event) + "\n")
-            if event["type"] == "tournament_end":
+            if event["type"] in ("tournament_end", "versus_end"):
                 self.result = event
             return
         kind = event["type"]
@@ -61,6 +61,13 @@ class PlainPrinter:
                 table.add_row(str(s["place"]), s["name"], f"{s['chips']:+d}", f"{s['bb_per_100']:+.1f}",
                               str(s["illegal"]), str(s["timeouts"]), "advances" if s["advances"] else "")
             console.print(table)
+        elif kind == "versus_start":
+            console.print(f"[bold]Heads-up[/] · {' vs '.join(event['players'])} · {event['hands']} hands")
+        elif kind == "versus_end":
+            self.result = event
+            for p in event["result"]["players"]:
+                console.print(f"  {p['name']:24} {p['chips']:+7d}  {p['bb_per_100']:+8.1f} bb/100")
+            console.print(f"[bold yellow]  🏆  {event['winner'] or 'nobody'}  🏆[/]  (heads-up, no leaderboard points)")
         elif kind == "tournament_end":
             self.result = event
             console.print(f"[bold yellow]{WINNER}[/]")

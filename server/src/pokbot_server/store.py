@@ -121,6 +121,9 @@ class Store:
     def bots(self) -> list[dict]:
         return list(self.state["bots"].values())
 
+    def bots_by_name(self) -> dict[str, dict]:
+        return dict(self.state["bots"])
+
     # -- results ---------------------------------------------------------------------------
 
     def record_tournament(self, result: dict) -> None:

@@ -96,7 +96,7 @@ JSON `{"action":"R","amount":24}` also works. Cards are rank `23456789TJQKA` + s
   extra 150 ms for network latency. Out of time, illegal, or malformed = check if free, else fold.
 - **Tournament:** entrants are spread over tables of 6; the top 2 real entrants per table
   advance; the final table's best real entrant is champion. Empty seats get house bots named
-  `[BOT] ...` (unless every seat is human); they never advance or score.
+  `[BOT] ...`; they never advance or score. Tournaments are bots only; humans play outside them.
 - **Ranking at a table:** chips won, then hands won. Bot tables play up to 10,000 hands; each
   tournament has a 25-minute budget, so tables may stop earlier and rank on hands played.
 - **Points:** +1 entry, +10 per table advanced from, final-table places 100/60/40/30/20/10,
@@ -112,6 +112,8 @@ pokbot validate mybot          # offline: loads, legal moves only, p99 under 5 m
 pokbot play mybot --local      # practice against [BOT]s on your machine
 pokbot play mybot              # join the next tournament live (keep the terminal open)
 pokbot play mybot --upload     # or upload: entered in every tournament, runs sandboxed
+pokbot play mybot --vs alice   # any time: your bot vs alice's uploaded bot, heads-up, 1,000 hands, no points
+pokbot play --vs alice         # play by hand against alice's bot (pokbot play: against [BOT]s)
 pokbot chat                    # lobby chat, who's online, watch; press p to play a table yourself
 pokbot leaderboard
 ```

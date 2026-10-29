@@ -70,7 +70,8 @@ def _validate_or_exit(target: str, hands: int, game: str, quiet_json: bool = Fal
 
 @app.command()
 def play(
-    files: Annotated[list[str] | None, typer.Argument(help="Bot file(s): mybot.py, mybot.py:MyBot, ./mybot, bot.js or a folder with pokbot.toml. Omit to play yourself.")] = None,
+    files: Annotated[list[str] | None, typer.Argument(help="Bot file(s): mybot.py, mybot.py:MyBot, ./mybot, bot.js or a folder with pokbot.toml. Omit to play by hand.")] = None,
+    vs: Annotated[str | None, typer.Option("--vs", help="Heads-up now against this GitHub user's uploaded bot (or a bot name like alice-tag). With FILE: your bot plays it on the server; without: you play it by hand.")] = None,
     local: Annotated[bool, typer.Option("--local", help="Run the tournament on this machine against [BOT]s; no server.")] = False,
     upload: Annotated[bool, typer.Option("--upload", help="Upload the bot; the server enters it in every tournament.")] = False,
     name: Annotated[str | None, typer.Option("--name", "-n", help="Display name.")] = None,
@@ -83,8 +84,16 @@ def play(
     as_json: Annotated[bool, typer.Option("--json", help="Machine-readable results on stdout.")] = False,
     server: ServerOpt = None,
 ) -> None:
-    """Enter a tournament. Tables of up to 6; the top 2 at each table advance until one champion is left.
-    Empty seats are filled by [BOT] house players unless every seat is human."""
+    """Play poker. Tournaments are bot-only and start every 30 minutes.
+
+    \b
+      pokbot play mybot.py             join the next tournament live
+      pokbot play mybot.py --upload    enter every tournament (server runs it)
+      pokbot play mybot.py --vs alice  your bot vs alice's bot, heads-up, now
+      pokbot play                      you, by hand, vs [BOT]s on this machine
+      pokbot play --vs alice           you, by hand, vs alice's bot
+      pokbot play a.py b.py --local    bots vs each other on this machine
+    """
     _check_game(game)
     files = files or []
     if (hands or seed is not None) and not local:
@@ -92,6 +101,9 @@ def play(
         raise typer.Exit(EXIT_USAGE)
     if upload and (local or len(files) != 1):
         err.print("[red]--upload takes exactly one FILE and no --local[/]")
+        raise typer.Exit(EXIT_USAGE)
+    if vs and (local or upload or len(files) > 1):
+        err.print("[red]--vs takes at most one FILE and no --local/--upload[/]")
         raise typer.Exit(EXIT_USAGE)
     if not local and len(files) > 1:
         err.print("[red]online play takes one FILE; use --local to run several bots against each other[/]")
@@ -108,6 +120,13 @@ def play(
     human = not files
     hero = name or (getpass.getuser() if human else Path(files[0].split(":")[0]).stem)
 
+    if vs:
+        bot_name = None
+        if files:  # the server plays both bots, so yours has to be uploaded first
+            bot_name = _do_upload(files[0], name or Path(files[0].split(":")[0]).stem, server)
+        raise typer.Exit(_play_online(None, hero, game, plain, as_json, server, vs=vs, bot_name=bot_name))
+    if human:  # tournaments are bot-only; by hand you play [BOT]s here, any time
+        local = True
     if local:
         code = _play_local(files, hero, human, game, hands, table_size, seed, plain, as_json)
     else:
@@ -157,7 +176,7 @@ def _practice(hero: str, game: str) -> None:
     _play_local([], hero, True, game, None, 6, None, False, False)
 
 
-def _play_online(target, hero, game, plain, as_json, server) -> int:
+def _play_online(target, hero, game, plain, as_json, server, vs=None, bot_name=None) -> int:
     url = config.server_url(server)
     token = config.token()
     if not token:
@@ -165,6 +184,7 @@ def _play_online(target, hero, game, plain, as_json, server) -> int:
         return EXIT_USAGE
     hero = config.load().get("name") or hero  # the server seats you under your account name
     bot = SubprocessBot.from_file(target, name=hero) if target else None
+    human = bot is None and bot_name is None
 
     try:
         if _use_tui(plain, as_json):
@@ -173,25 +193,25 @@ def _play_online(target, hero, game, plain, as_json, server) -> int:
             async def source(app: PokbotApp) -> None:
                 await app.handle({"type": "info", "message": f"connecting to {url} as [bold]{hero}[/]…"})
                 await online.play_live(url, token, hero, app.handle, bot=bot,
-                                       ask=None if bot else app.ask, game=game,
-                                       on_ready=app.set_chat_sender)
+                                       ask=app.ask if human else None, game=game,
+                                       on_ready=app.set_chat_sender, vs=vs, bot_name=bot_name)
 
-            app = PokbotApp(source, hero=hero, hero_is_human=bot is None, game=game, practice="after")
+            app = PokbotApp(source, hero=bot_name or hero, hero_is_human=human, game=game, practice="after")
             if app.run() == "practice":
                 _practice(hero, game)
             return EXIT_OK
-        if bot is None:
+        if human:
             err.print("[red]playing yourself needs an interactive terminal[/]")
             return EXIT_USAGE
-        printer = PlainPrinter(hero=hero, as_json=as_json)
-        asyncio.run(online.play_live(url, token, hero, printer.handle, bot=bot, game=game))
+        printer = PlainPrinter(hero=bot_name or hero, as_json=as_json)
+        asyncio.run(online.play_live(url, token, hero, printer.handle, bot=bot, game=game, vs=vs, bot_name=bot_name))
         return EXIT_OK
     except (online.ServerError, OSError) as e:
         err.print(f"[red]server error:[/] {e}")
         return EXIT_SERVER
 
 
-def _do_upload(target: str, name: str | None, server: str | None) -> None:
+def _do_upload(target: str, name: str | None, server: str | None) -> str:
     url = config.server_url(server)
     token = config.token()
     login_name = config.load().get("name")
@@ -208,6 +228,7 @@ def _do_upload(target: str, name: str | None, server: str | None) -> None:
         raise typer.Exit(EXIT_SERVER) from None
     console.print(f"[green]uploaded[/] [bold]{info['name']}[/] · entered in every tournament")
     console.print(f"next tournament starts at [bold]{info['next_tournament']}[/]")
+    return info["name"]
 
 
 @app.command()

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import logging
 import shutil
 import tempfile
 from contextlib import asynccontextmanager
@@ -21,6 +22,7 @@ from pydantic import BaseModel
 from . import sandbox
 from .chat import ChatError
 from .config import settings
+from .games import GameError, Games, resolve_bot
 from .github import DeviceFlow, GitHubError
 from .hub import Conn, Hub
 from .store import Store, StoreError, check_name
@@ -32,6 +34,9 @@ class RegisterBody(BaseModel):
 
 class PollBody(BaseModel):
     session: str
+
+
+log = logging.getLogger("pokbot.app")
 
 
 def every(seconds: int) -> str:
@@ -68,6 +73,7 @@ def create_app(start_scheduler: bool = True) -> FastAPI:
         origin = "/".join(settings.site_url.split("/")[:3])
         app.add_middleware(CORSMiddleware, allow_origins=[origin], allow_methods=["GET"])
     app.state.hub = hub
+    arena = Games(store, hub)  # on-demand heads-up games
     app.state.store = store
 
     def owner(authorization: str | None) -> str:
@@ -269,11 +275,38 @@ def create_app(start_scheduler: bool = True) -> FastAPI:
             kind = "human" if hello.get("kind") == "human" else "bot"
             name = user  # one live seat per account; the name is never client-chosen
             check_name(name)
+            versus = bool(hello.get("vs"))
+            if not versus and kind == "human":
+                raise ValueError(
+                    "tournaments are bot-only. Play by hand with `pokbot play` (against [BOT]s) "
+                    "or `pokbot play --vs <github-user>` (against their bot)"
+                )
+            if versus:
+                resolve_bot(store, str(hello["vs"]))  # fail fast on an unknown opponent
             conn = Conn(ws, name, kind, user=user)
-            hub.join(conn)
+            if not versus:
+                hub.join(conn)
         except (ValueError, StoreError, TimeoutError) as e:
             await ws.send_text(json.dumps({"type": "error", "message": str(e)}))
             await ws.close()
+            return
+
+        if versus:
+            async def game() -> None:
+                try:
+                    await arena.play(conn, hello)
+                except GameError as e:
+                    await conn.push({"type": "error", "message": str(e)})
+                except Exception:
+                    log.exception("game for %s crashed", user)
+                    await conn.push({"type": "error", "message": "the game crashed on the server; sorry"})
+                finally:
+                    await asyncio.sleep(0.5)  # let the writer flush the result
+                    with contextlib.suppress(RuntimeError):
+                        await ws.close()
+
+            task = asyncio.create_task(game())
+            await serve(conn, lambda: None, task.cancel)
             return
 
         def opened() -> None:

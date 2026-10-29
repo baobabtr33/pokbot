@@ -87,8 +87,12 @@ async def play_live(
     ask: Callable[[dict], Awaitable[str]] | None = None,
     game: str = "holdem",
     on_ready: Callable[[ChatSender], None] | None = None,
+    vs: str | None = None,
+    bot_name: str | None = None,
 ) -> dict | None:
-    """Join the next tournament as a live bot (`bot`) or a human (`ask`). Returns the result.
+    """Join the next tournament as a live bot (`bot`), or with `vs` start a heads-up game now
+    against that player's uploaded bot: as a human (`ask`) or with your uploaded bot `bot_name`
+    (the server runs both bots). Returns the tournament_end / versus_end event.
     `on_ready` receives a function for sending chat messages once connected."""
     url = config.ws_url(server, "/ws/play")
     if token:
@@ -98,7 +102,10 @@ async def play_live(
     pending: set[asyncio.Task] = set()
 
     async with websockets.connect(url, max_size=2**22) as ws:
-        await ws.send(json.dumps({"type": "hello", "name": name, "kind": kind, "game": game}))
+        hello = {"type": "hello", "name": name, "kind": kind, "game": game}
+        if vs:
+            hello.update(vs=vs, bot=bot_name)
+        await ws.send(json.dumps(hello))
         if on_ready:
             on_ready(_chat_sender(ws))
 
@@ -115,7 +122,7 @@ async def play_live(
                 await on_event(msg)
             elif mtype == "event":
                 await on_event(msg["event"])
-                if msg["event"]["type"] == "tournament_end":
+                if msg["event"]["type"] in ("tournament_end", "versus_end"):
                     result = msg["event"]
                     break
             elif mtype in PROTOCOL_TYPES:

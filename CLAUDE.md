@@ -4,9 +4,10 @@ Guidance for Claude Code when working in this repository.
 
 ## What this project is
 
-`pokbot` is a terminal-first poker tournament platform. Users write poker bots (or sit down
-themselves) and enter **knockout tournaments that start every 30 minutes on the clock**
-(:00 and :30). A bot enters either by **keeping a live websocket open** (`pokbot play mybot`)
+`pokbot` is a terminal-first poker tournament platform. Users write poker bots and enter
+**bot-only knockout tournaments that start every 30 minutes on the clock** (:00 and :30).
+Outside tournaments, anyone can **challenge another player's bot heads-up on demand** or
+**play by hand against bots** (see "On-demand games"). A bot enters either by **keeping a live websocket open** (`pokbot play mybot`)
 or by **uploading its code** so the server plays every tournament for it
 (`pokbot play mybot --upload`). The CLI shows the action live with dynamic terminal graphics
 and a fireworks "WINNER" screen for the champion.
@@ -42,6 +43,7 @@ poker-bot-arena/
     src/pokbot_server/
       app.py              # REST, /ws/play, /ws/watch, /install.sh, static web/
       hub.py              # lobby, 30-minute scheduler, RemotePlayer, event fan-out, presence + chat
+      games.py            # on-demand heads-up games (--vs): bot vs bot, human vs bot
       chat.py             # ChatRoom history, clean(), per-connection RateLimiter
       github.py           # GitHub OAuth device flow (proxied)
       sandbox.py          # docker argv for uploaded bots
@@ -70,7 +72,7 @@ POKBOT_INTERVAL=20 POKBOT_BOT_HANDS=1000 POKBOT_SANDBOX=unsafe-local uv run pokb
 uv run pokbot validate bots/examples/pairs.py
 uv run pokbot play bots/examples/pairs.py --local            # live TUI vs [BOT]s
 uv run pokbot play bots/examples/*.py --local --plain --hands 2000
-uv run pokbot play --local                                   # play yourself
+uv run pokbot play                                           # play by hand vs [BOT]s (local)
 ./scripts/build_dist.sh                         # rebuild installer wheels after changing core/cli
 ```
 
@@ -106,7 +108,7 @@ pokbot login
 ## The `pokbot` CLI
 
 ```
-pokbot play [FILE ...] [--local] [--upload] [--name] [--hands N] [--table-size N] [--seed N] [--plain] [--json]
+pokbot play [FILE ...] [--vs USER] [--local] [--upload] [--name] [--hands N] [--table-size N] [--seed N] [--plain] [--json]
 pokbot validate FILE [--hands N] [--time-ms N] [--strict] [--json]
 pokbot init NAME [--lang py|js]
 pokbot chat | watch                      # lobby chat + who's online + spectate
@@ -115,7 +117,10 @@ pokbot login | logout | whoami | games | schedule | leaderboard
 
 - `FILE` = `mybot.py`, `mybot.py:ClassName`, `./executable`, `bot.js`, or a folder with
   `pokbot.toml` (`name`, `entrypoint`, `runtime` = python | node).
-- No FILE = you play as a human (TUI action bar).
+- No FILE = you play by hand (TUI action bar): against [BOT]s on this machine, or with
+  `--vs USER` against that user's uploaded bot on the server. Never in a tournament.
+- `FILE --vs USER` uploads FILE (as `<login>-<stem>`, so it also enters tournaments) and asks
+  the server to play it heads-up against USER's bot right away.
 - `play` validates every FILE first (200 hands) unless `--skip-validate`; it never queues a
   bot that `validate` rejects. Online play takes one FILE; `--local` takes many.
 - Exit codes are a contract: `0` ok, `1` validation failed, `2` usage, `3` server/network.
@@ -127,15 +132,15 @@ pokbot login | logout | whoami | games | schedule | leaderboard
 - Entrants are spread evenly over the fewest tables of `POKBOT_TABLE_SIZE` (default 6, must
   be > 2). **Top 2 entrants per table advance**; repeat until the field fits one table; the
   final table's top entrant is the **single champion**.
-- Empty seats are filled with **house bots named `[BOT] ...`** unless every seated player is
-  human. House bots play every hand but **never advance** (so the field always shrinks and the
+- **Tournaments are bot-only.** `/ws/play` refuses `kind: human` unless the hello has `vs`.
+- Empty seats are filled with **house bots named `[BOT] ...`**. House bots play every hand but **never advance** (so the field always shrinks and the
   winner is always a real entrant). Names starting with `[BOT]` are reserved.
 - Ranking at a table: chips won, then hands won, then seat order.
 - **Points** (`core/.../points.py`, real entrants only): +1 entry, +10 per table advanced
   from, final-table place 100/60/40/30/20/10, other finalists 5. Sent as `points` in
   `tournament_end`; the leaderboard sorts by points, then titles, then chips.
-- Hands per table: 10,000 when only bots are seated (`POKBOT_BOT_HANDS`), 30 when a human is
-  seated (`POKBOT_HUMAN_HANDS`). Stacks reset to 200 (100 bb) every hand; blinds 1/2.
+- Hands per table: 10,000 (`POKBOT_BOT_HANDS`). (Core still supports human seats for local
+  play: 30 hands, `human_hands`.) Stacks reset to 200 (100 bb) every hand; blinds 1/2.
 - Heads-up matches use duplicate seating (second half replays the same decks with seats
   swapped). Every hand's deck comes from `hand_seed(master_seed, index)` so any match replays.
 
@@ -181,11 +186,26 @@ JSON `{"action":"R","amount":24}` is also accepted. Lowercase is tolerated.
 - `POST /api/bots?name=X` (Bearer key, body = zip from `bundle.pack`) — upload/replace;
   `DELETE /api/bots/{name}`; `GET /api/bots`.
 - `GET /api/schedule`, `/api/leaderboard`, `/api/tournaments`, `/api/games`, `/api/whoami`.
-- `WS /ws/play?token=` — first message `{"type":"hello","name","kind":"bot"|"human","game"}`;
+- `WS /ws/play?token=` — first message `{"type":"hello","kind":"bot","game"}` joins the
+  tournament lobby (bots only). With `"vs": USER` it starts an on-demand game instead:
+  `"kind":"human"` (you answer `action_request`s) or `"kind":"bot","bot":<your uploaded bot>`.
   server sends `lobby`, `info`, `event` (tournament/table events) and protocol messages;
   client replies `{"type":"action","reply":"C","req":<id>}`.
 - `WS /ws/watch?token=` — spectators (token optional; needed to chat).
 - `GET /api/online` — `{online, playing, spectators, names}`.
+
+## On-demand games (`server/games.py`)
+
+- Heads-up, any time, never scored. Opponent = `resolve_bot(store, ref)`: an exact bot name, or
+  the user's bot named after them, else their newest upload.
+- Bot vs bot: both uploaded bots run sandboxed on the server, `POKBOT_VERSUS_HANDS` (1000,
+  duplicate seating), `POKBOT_VERSUS_BUDGET_S` (120). At most `POKBOT_MAX_BOT_GAMES` (1) at
+  once; extra requests get "busy", never a queue. Your bot must be yours (`owner`).
+- Human vs bot: `POKBOT_HUMAN_HANDS` (30), `POKBOT_HUMAN_GAME_BUDGET_S`; at most
+  `POKBOT_MAX_HUMAN_GAMES`. One game per account at a time.
+- Events go only to the requester, wrapped like tournament table events (table `vs`), between
+  `versus_start` and `versus_end` (`winner`, `result`). The opponent's hole cards are hidden;
+  bot-vs-bot hands are down-sampled for display.
 
 ## Chat and presence
 

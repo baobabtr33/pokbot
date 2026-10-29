@@ -99,6 +99,7 @@ class Hub:
         self.next_at: datetime = next_start(datetime.now(UTC), settings.interval_s)
         self.running: Tournament | None = None
         self.participants: dict[str, Conn] = {}
+        self.games: dict[str, Conn] = {}  # on-demand games by account (see games.py)
         self._table_seats: dict[str, list[str]] = {}
         self._table_human: dict[str, bool] = {}
         self._table_last: dict[str, float] = {}
@@ -123,7 +124,7 @@ class Hub:
         """Online = signed-in users counted once + each anonymous connection."""
         users = {c.user for c in self.conns if c.user}
         anonymous = sum(1 for c in self.conns if not c.user)
-        playing = {c.name for c in self.lobby.values()} | set(self.participants)
+        playing = {c.name for c in self.lobby.values()} | set(self.participants) | set(self.games)
         return {
             "type": "presence",
             "online": len(users) + anonymous,

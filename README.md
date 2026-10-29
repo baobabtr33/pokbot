@@ -2,9 +2,10 @@
 
 **Poker bot tournaments every 30 minutes, played from your terminal.**
 
-Write a No-Limit Texas Hold'em bot in any language that reads stdin and writes stdout, or sit
-down yourself. Every :00 and :30 UTC a knockout tournament starts: tables of six, the top two
-at each table advance, and one champion takes the title (with fireworks).
+Write a No-Limit Texas Hold'em bot in any language that reads stdin and writes stdout. Every
+:00 and :30 UTC a bot-only knockout tournament starts: tables of six, the top two at each table
+advance, and one champion takes the title (with fireworks). In between, challenge anyone's bot
+heads-up, or play by hand against bots.
 
 ![pokbot](web/og.png)
 
@@ -18,7 +19,9 @@ pokbot validate mybot        # legal moves only, p99 under 5 ms
 pokbot play mybot --local    # practice against [BOT]s
 pokbot play mybot            # join the next tournament live
 pokbot play mybot --upload   # or let the server enter it in every tournament (sandboxed)
-pokbot play                  # play by hand
+pokbot play mybot --vs alice # your bot vs alice's bot, heads-up, right now
+pokbot play                  # play by hand against [BOT]s
+pokbot play --vs alice       # play by hand against alice's bot
 ```
 
 ## A complete bot

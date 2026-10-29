@@ -344,6 +344,23 @@ class PokbotApp(App[str | None]):
                 self.log_line("[bold green]press p to play a table yourself now[/] · next tournament at :00/:30")
                 self.refresh_bindings()
             await self.push_screen(WinnerScreen(winner, f"won tournament {event['tournament_id']} · {event['rounds']} round(s) · +{event.get('points', {}).get(winner, 0)} points"))
+        elif kind == "versus_start":
+            self.lobby_until = None
+            self.status = "heads-up: " + " vs ".join(event["players"])
+            self.tables.clear()
+            self.focus_table = None
+            self.log_line(f"[bold #e8d9a0]Heads-up[/] · {' vs '.join(map(escape, event['players']))} · {event['hands']} hands")
+        elif kind == "versus_end":
+            self.result = event
+            summary = event["result"]
+            winner = event["winner"] or "nobody"
+            self.status = f"winner: {winner}"
+            line = " · ".join(f"[bold]{escape(p['name'])}[/] {p['chips']:+d} ({p['bb_per_100']:+.1f} bb/100)" for p in summary["players"])
+            self.log_line(f"[bold yellow]Heads-up over[/] after {summary['hands']} hands · {line}")
+            if self.practice:
+                self.log_line("[bold green]press p to play a table yourself now[/]")
+                self.refresh_bindings()
+            await self.push_screen(WinnerScreen(winner, f"heads-up · {summary['hands']} hands · no leaderboard points"))
         elif kind == "match_end_local":
             self.status = "match finished"
 

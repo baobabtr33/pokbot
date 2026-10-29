@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>pokbot · Poker bot tournaments every 30 minutes</title>
-<meta name="description" content="Write a poker bot in Python or JavaScript, enter it from your terminal, and compete in free Texas Hold'em knockout tournaments every 30 minutes. Humans and AI agents welcome.">
+<meta name="description" content="Write a poker bot in Python or JavaScript, enter it from your terminal, and compete in free Texas Hold'em knockout tournaments every 30 minutes. Bots built by people and AI agents welcome.">
 <link rel="canonical" href="__POKBOT_SITE__/">
 <meta name="robots" content="index, follow">
 <meta name="theme-color" content="#0b1d13">
@@ -15,7 +15,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="pokbot">
 <meta property="og:title" content="pokbot · Poker bot tournaments every 30 minutes">
-<meta property="og:description" content="Write a poker bot, enter it from your terminal, win the tournament. Free Texas Hold'em knockouts every 30 minutes, open to humans and AI agents.">
+<meta property="og:description" content="Write a poker bot, enter it from your terminal, win the tournament. Free Texas Hold'em knockouts every 30 minutes, open to bots built by people and AI agents.">
 <meta property="og:url" content="__POKBOT_SITE__/">
 <meta property="og:image" content="__POKBOT_SITE__/og.png">
 <meta property="og:image:width" content="1200">
@@ -115,8 +115,12 @@
 <span class="c"># …or upload it and let the server play every tournament for you</span>
 <span class="p">$</span> pokbot play mybot --upload
 
-<span class="c"># or sit down yourself</span>
-<span class="p">$</span> pokbot play</code></pre>
+<span class="c"># challenge someone's bot right now (heads-up, any time)</span>
+<span class="p">$</span> pokbot play mybot --vs alice
+
+<span class="c"># or play by hand: against [BOT]s, or against alice's bot</span>
+<span class="p">$</span> pokbot play
+<span class="p">$</span> pokbot play --vs alice</code></pre>
   </section>
 
   <section class="grid">
@@ -126,11 +130,11 @@
     </div>
     <div class="card-box">
       <h3>10,000 hands</h3>
-      <p>Bot tables play 10,000 hands so skill beats luck. Stacks reset every hand. Tables with a human play a short session.</p>
+      <p>Bot tables play 10,000 hands so skill beats luck. Stacks reset every hand. Tournaments are bots only; play by hand any time outside them.</p>
     </div>
     <div class="card-box">
       <h3>[BOT] seats</h3>
-      <p>Empty seats are filled by house bots unless every player is human. House bots play hard but never advance.</p>
+      <p>Empty seats are filled by house bots. House bots play hard but never advance.</p>
     </div>
   </section>
 

@@ -325,3 +325,72 @@ def test_play_now_key_from_watch_and_after_tournament():
     assert asyncio.run(scenario("after", False)) == "still running"  # tournament not over yet
     assert asyncio.run(scenario("after", True)) == "practice"
     assert asyncio.run(scenario(None, True)) == "still running"  # local play: no key
+
+
+def test_tournaments_are_bot_only_and_versus_games_run_now(tmp_path, monkeypatch):
+    import pokbot_server.app as server_app
+    from pokbot_core.bundle import pack
+    from pokbot_server.config import Settings
+
+    cfg = Settings(data_dir=tmp_path, sandbox="unsafe-local", dev_login=True, versus_hands=40, human_hands=3)
+    for mod in ("app", "sandbox", "games", "hub"):
+        monkeypatch.setattr(f"pokbot_server.{mod}.settings", cfg)
+
+    def until(ws, kind):
+        while True:
+            msg = ws.receive_json()
+            if msg["type"] == "error":
+                raise AssertionError(msg["message"])
+            if msg["type"] == "event" and msg["event"]["type"] == kind:
+                return msg["event"]
+
+    with TestClient(server_app.create_app(start_scheduler=False)) as client:
+        tokens = {n: client.post("/api/register", json={"name": n}).json()["token"] for n in ("alice", "bob")}
+        for owner, bot in (("alice", "pairs"), ("bob", "caller")):
+            data, _ = pack(str(EXAMPLES / f"{bot}.py"))
+            r = client.post(f"/api/bots?name={owner}-{bot}", content=data,
+                            headers={"Authorization": f"Bearer {tokens[owner]}"})
+            assert r.status_code == 200, r.text
+
+        # Humans can't take a tournament seat.
+        with client.websocket_connect(f"/ws/play?token={tokens['alice']}") as ws:
+            ws.send_json({"type": "hello", "kind": "human"})
+            assert "bot-only" in ws.receive_json()["message"]
+        # Unknown opponent fails fast.
+        with client.websocket_connect(f"/ws/play?token={tokens['alice']}") as ws:
+            ws.send_json({"type": "hello", "kind": "human", "vs": "nobody"})
+            assert "no uploaded bot" in ws.receive_json()["message"]
+
+        # Bot vs bot: both uploaded bots play on the server; the opponent's cards stay hidden.
+        with client.websocket_connect(f"/ws/play?token={tokens['alice']}") as ws:
+            ws.send_json({"type": "hello", "kind": "bot", "vs": "bob", "bot": "alice-pairs"})
+            start = until(ws, "versus_start")
+            assert start["players"] == ["alice-pairs", "bob-caller"]
+            hidden = until(ws, "table")
+            while hidden["event"]["type"] != "hand_start":
+                hidden = until(ws, "table")
+            holes = dict(zip(hidden["event"]["players"], hidden["event"]["holes"]))
+            assert None not in holes["alice-pairs"] and holes["bob-caller"] == [None, None]
+            end = until(ws, "versus_end")
+            assert end["result"]["hands"] == 40
+            assert sum(p["chips"] for p in end["result"]["players"]) == 0
+
+        # Someone else's bot can't be borrowed as "yours".
+        with client.websocket_connect(f"/ws/play?token={tokens['alice']}") as ws:
+            ws.send_json({"type": "hello", "kind": "bot", "vs": "bob", "bot": "bob-caller"})
+            msg = ws.receive_json()
+            while msg["type"] != "error":
+                msg = ws.receive_json()
+            assert "upload your bot" in msg["message"]
+
+        # Human vs bot: answer every action_request by hand.
+        with client.websocket_connect(f"/ws/play?token={tokens['bob']}") as ws:
+            ws.send_json({"type": "hello", "kind": "human", "vs": "alice"})
+            while True:
+                msg = ws.receive_json()
+                if msg["type"] == "action_request":
+                    ws.send_json({"type": "action", "reply": "C" if "C" in msg["legal"] else "X", "req": msg["req"]})
+                elif msg["type"] == "event" and msg["event"]["type"] == "versus_end":
+                    assert msg["event"]["result"]["hands"] == 3
+                    break
+        assert client.get("/api/leaderboard").json()["players"] == []  # games never score

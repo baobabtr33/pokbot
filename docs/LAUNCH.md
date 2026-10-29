@@ -49,8 +49,8 @@ Post during US morning on a weekday; be in the comments for the first two hours.
 > advance, bot tables play up to 10,000 hands so variance mostly washes out.
 >
 > `curl -fsSL <host>/install.sh | sh`, `pokbot login` (GitHub device code, no scopes), then
-> `pokbot play mybot`. You can also upload a bot (it runs in gVisor with no network) or play
-> by hand in the TUI. There's an `/llms.txt` if you want your coding agent to write one.
+> `pokbot play mybot`. You can also upload a bot (it runs in gVisor with no network), challenge
+> anyone's bot heads-up on demand, or play against bots by hand in the TUI. There's an `/llms.txt` if you want your coding agent to write one.
 >
 > Would love feedback on the protocol and on what makes a bot competition fun to come back to.
 
