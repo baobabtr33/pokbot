@@ -246,7 +246,8 @@ an engine test without checking the actual poker rule.
 ## Deployment
 
 Planned: Vercel for the site, `install.sh` and wheels; one AWS Lightsail instance ($12 plan)
-for `pokbot-server` and the Docker/gVisor sandbox, ~$15/month total. See `docs/DEPLOY.md`
+for `pokbot-server` and the Docker/gVisor sandbox, ~$15/month total, paid from AWS free credits
+(Lightsail 3-month trial + new-account credits cover about the first year). See `docs/DEPLOY.md`
 (not implemented yet).
 
 ## Not done yet

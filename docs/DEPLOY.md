@@ -156,3 +156,39 @@ Firecracker if gVisor overhead hurts; reconnect handling; hand logs in S3.
 | Monitoring (Lightsail alarms + free uptime checker) | $0 |
 | Vercel Hobby (non-commercial) | $0 |
 | **Total** | **~$15/month** (~$10 on the $7 plan; +$20 if Vercel Pro is needed for commercial use) |
+
+## Paying with AWS free credits
+
+Checked October 2026; confirm on your own account (Billing → Credits, and the Lightsail
+pricing page) because third-party summaries disagree.
+
+- **New AWS accounts (created on or after 15 July 2025)** get $100 in Free Tier credits at
+  sign-up and can earn up to $100 more by completing onboarding activities (e.g. launching an
+  EC2 instance, trying Bedrock). Credits expire 12 months after account creation.
+- At sign-up you choose the **Free plan** or the **Paid plan**. The Free plan never charges a
+  card, but it ends after 6 months or when credits run out, and then the account is closed
+  unless you upgrade. **Pick the Paid plan for pokbot** (or upgrade before month 6): credits
+  still apply, and the server is not shut down at month 6.
+- **Lightsail adds 3 months free** on the $5, $7 and $12 Linux bundles (750 hours/month, one
+  instance), for accounts that started using Lightsail on or after 8 July 2021.
+
+How far that goes with the plan above:
+
+| Months | Lightsail $12 plan | Snapshots + S3 | Paid from |
+|---|---|---|---|
+| 1–3 | $0 (Lightsail free trial) | ~$4/month | credits |
+| 4–12 | $12/month | ~$4/month | credits (~$144 + $36 = ~$180 total for the year) |
+| 13+ | $12/month | ~$4/month | card (~$15/month) |
+
+So $200 of credits covers roughly the **first 12 months**. To stretch them, use the $7 plan
+(1 GB, `POKBOT_MAX_CONTAINERS=1`) for the soft launch and turn off automatic snapshots in
+favour of the free-ish hourly S3 copy.
+
+Guard rails, set up on day one:
+- An **AWS Budgets** alert at $1 of actual (non-credit) spend and another at 80% of credits
+  used, emailed to you.
+- Only Lightsail and one S3 bucket. Earning the extra $100 means briefly launching an EC2
+  instance for an onboarding activity; terminate it the same day.
+- Startups can also apply to **AWS Activate** (Founders tier: credits for self-funded
+  startups) once there is a company and a website.
+
