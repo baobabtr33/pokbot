@@ -302,3 +302,4 @@ def test_build_pages(tmp_path):
     assert "https://someone.github.io/pokbot/bots.md" in (tmp_path / "llms.txt").read_text()
     assert "<loc>https://someone.github.io/pokbot/llms.txt</loc>" in (tmp_path / "sitemap.xml").read_text()
     assert (tmp_path / "og.png").stat().st_size > 1000 and (tmp_path / ".nojekyll").exists()
+    assert list(tmp_path.glob("google*.html")), "Search Console verification file must be published"

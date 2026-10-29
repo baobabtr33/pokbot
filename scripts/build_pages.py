@@ -28,6 +28,8 @@ def build(site: str, api: str, out: Path) -> None:
         (out / name).write_text(text)
     for name in COPIED:
         shutil.copyfile(WEB / name, out / name)
+    for path in WEB.glob("google*.html"):  # Search Console ownership files; must stay published
+        shutil.copyfile(path, out / path.name)
     urls = "".join(f"<url><loc>{site}{p}</loc></url>" for p in PAGES)
     (out / "sitemap.xml").write_text(
         '<?xml version="1.0" encoding="UTF-8"?>\n'
