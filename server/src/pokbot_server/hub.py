@@ -63,6 +63,8 @@ class RemotePlayer(Player):
         self.name = conn.name
         self.kind = conn.kind
         self._req = 0
+        if self.kind == "bot":
+            self.time_ms = settings.time_ms + settings.live_network_ms
 
     async def notify(self, msg: dict) -> None:
         await self.conn.push(msg)
@@ -154,8 +156,6 @@ class Hub:
     def join(self, conn: Conn) -> None:
         if conn.name in self.lobby or conn.name in self.participants:
             raise ValueError(f"{conn.name} is already connected")
-        if conn.name in {b["name"] for b in self.store.bots()} and conn.kind == "bot":
-            raise ValueError(f"{conn.name} is an uploaded bot name; pick another for live play")
         self.lobby[conn.name] = conn
         self.broadcast_lobby()
         self.broadcast_presence()
@@ -220,6 +220,7 @@ class Hub:
             bot_hands=settings.bot_hands,
             human_hands=settings.human_hands,
             match=MatchConfig(time_ms=settings.time_ms, timebank_ms=settings.timebank_ms),
+            budget_s=settings.budget_s,
         )
         self.running = Tournament(entrants, cfg, on_event=self.on_event)
         log.info("tournament %s starting with %d entrants", self.running.id, len(entrants))

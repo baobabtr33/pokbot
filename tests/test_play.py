@@ -92,8 +92,9 @@ def test_server_register_upload_schedule(tmp_path, monkeypatch):
     import pokbot_server.app as server_app
     from pokbot_server.config import Settings
 
-    monkeypatch.setattr(server_app, "settings", Settings(data_dir=tmp_path, sandbox="unsafe-local"))
-    monkeypatch.setattr("pokbot_server.sandbox.settings", Settings(data_dir=tmp_path, sandbox="unsafe-local"))
+    cfg = Settings(data_dir=tmp_path, sandbox="unsafe-local", dev_login=True)
+    monkeypatch.setattr(server_app, "settings", cfg)
+    monkeypatch.setattr("pokbot_server.sandbox.settings", cfg)
     from pokbot_core.bundle import pack
 
     with TestClient(server_app.create_app(start_scheduler=False)) as client:
@@ -104,10 +105,23 @@ def test_server_register_upload_schedule(tmp_path, monkeypatch):
         assert client.post("/api/register", json={"name": "[BOT] x"}).status_code == 400
 
         data, _ = pack(str(EXAMPLES / "caller.py"))
-        r = client.post("/api/bots?name=callme", content=data, headers={"Authorization": f"Bearer {token}"})
+        auth = {"Authorization": f"Bearer {token}"}
+        assert client.post("/api/bots?name=callme", content=data, headers=auth).status_code == 400
+        r = client.post("/api/bots?name=alice-callme", content=data, headers=auth)
         assert r.status_code == 200, r.text
         assert client.post("/api/bots?name=x2", content=data).status_code == 401
-        assert [b["name"] for b in client.get("/api/bots").json()["bots"]] == ["callme"]
+        assert [b["name"] for b in client.get("/api/bots").json()["bots"]] == ["alice-callme"]
+
+        # Live play needs a signed-in account, and the seat name is the account name.
+        with client.websocket_connect("/ws/play") as ws:
+            ws.send_json({"type": "hello", "name": "mallory", "kind": "bot"})
+            assert "sign in" in ws.receive_json()["message"]
+        with client.websocket_connect(f"/ws/play?token={token}") as ws:
+            ws.send_json({"type": "hello", "name": "mallory", "kind": "bot"})
+            info = ws.receive_json()
+            while info["type"] != "info":
+                info = ws.receive_json()
+            assert "joined as [bold]alice[/]" in info["message"]
         assert client.get("/api/schedule").json()["entrants"] == 1
 
 
@@ -146,7 +160,7 @@ def test_github_device_login_and_install_script(tmp_path, monkeypatch):
 def test_chat_rules():
     from pokbot_server.chat import ChatError, RateLimiter, clean
 
-    assert clean("  hi\x00 there‮ ") == "hi there"
+    assert clean("  hi\x00 there\u202e ") == "hi there"
     with pytest.raises(ChatError):
         clean("   ")
     with pytest.raises(ChatError):
@@ -159,7 +173,7 @@ def test_chat_and_presence_over_websockets(tmp_path, monkeypatch):
     import pokbot_server.app as server_app
     from pokbot_server.config import Settings
 
-    monkeypatch.setattr(server_app, "settings", Settings(data_dir=tmp_path))
+    monkeypatch.setattr(server_app, "settings", Settings(data_dir=tmp_path, dev_login=True))
 
     def until(ws, kind):
         while True:
@@ -191,3 +205,30 @@ def test_chat_and_presence_over_websockets(tmp_path, monkeypatch):
         with client.websocket_connect("/ws/watch") as late:
             history = until(late, "chat_history")["messages"]
             assert history[0]["text"] == "[bold]gg[/] all"
+
+
+def test_points_system():
+    from pokbot_core.points import award_points
+
+    def row(name, kind="bot", advances=False):
+        return {"name": name, "kind": kind, "advances": advances}
+
+    result = {"tables": [
+        {"final": False, "standings": [row("[BOT] Ace", "house"), row("a", advances=True), row("b", advances=True), row("c")]},
+        {"final": True, "standings": [row("[BOT] Ace", "house"), row("b"), row("a")]},
+    ]}
+    assert award_points(result) == {"a": 1 + 10 + 60, "b": 1 + 10 + 100, "c": 1}
+
+
+async def test_tournament_reports_points_and_respects_budget():
+    import time
+
+    from pokbot_core.tournament import rounds_needed
+
+    assert rounds_needed(6, 6) == 1 and rounds_needed(7, 6) == 2 and rounds_needed(40, 6) == 3
+    entrants = [Entrant(f"bot{i}") for i in range(13)]
+    start = time.monotonic()
+    result = await Tournament(entrants, TournamentConfig(bot_hands=10**9, seed=2, budget_s=1.5)).run()
+    assert time.monotonic() - start < 5
+    assert result["points"][result["winner"]] >= 100
+    assert all(s["hands"] > 0 for t in result["tables"] for s in t["standings"])

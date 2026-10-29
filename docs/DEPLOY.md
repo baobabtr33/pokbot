@@ -7,7 +7,7 @@ Status: plan, not yet implemented. Domains below use `pokbot.dev` as a placehold
 | Host | Serves | Why |
 |---|---|---|
 | **Vercel** `pokbot.dev` | `web/` intro page, `install.sh`, `/dist/*` wheels; rewrites `/api/*` to AWS | Static + CDN; free/cheap; preview deploys |
-| **AWS EC2** `api.pokbot.dev` | `pokbot-server` (REST, `/ws/play`, `/ws/watch`, scheduler, chat), Docker + gVisor sandbox for uploaded bots | Needs long-lived websockets, an in-memory 30-minute scheduler, and Docker for untrusted code |
+| **AWS Lightsail** `api.pokbot.dev` | `pokbot-server` (REST, `/ws/play`, `/ws/watch`, scheduler, chat), Docker + gVisor sandbox for uploaded bots | Needs long-lived websockets, an in-memory 30-minute scheduler, and Docker for untrusted code |
 
 Vercel Functions cannot run the game server: they are short-lived, cannot hold websockets
 for a tournament, and cannot launch containers. Vercel rewrites do not proxy websockets, so
@@ -36,16 +36,16 @@ that one URL for all HTTP and websocket traffic. Downloads come from `https://po
      remains. Add `public/` to `.gitignore`.
 2. **`server/src/pokbot_server/main.py`**: `proxy_headers=True, forwarded_allow_ips="127.0.0.1"`;
    keep `ws_ping_interval=20`; exactly one worker (the Hub is in memory).
-3. **Tournament limits** (`core/src/pokbot_core/tournament.py`, `server/.../config.py`):
-   `POKBOT_MAX_CONTAINERS` semaphore around `_play_table` (today every table starts at once);
-   bot-table `time_ms` ≈ 50 ms; `POKBOT_MATCH_DEADLINE_S` ≈ 1500 to finish a table on current
-   standings so one slow bot cannot overrun the 30-minute slot.
+3. **Tournament limits**: done: 5 ms per-decision cap (`POKBOT_TIME_MS`), 150 ms network
+   allowance for live bots (`POKBOT_LIVE_NETWORK_MS`), 1 s time bank, and a 25-minute
+   tournament budget split across rounds (`POKBOT_TOURNAMENT_BUDGET_S`). Still to do: a
+   `POKBOT_MAX_CONTAINERS` semaphore around `_play_table` (today every table starts at once).
 4. **Sandbox** (`server/src/pokbot_server/sandbox.py`): `--runtime=runsc` (gVisor) via
    `POKBOT_DOCKER_RUNTIME`; pinned `pokbot-py` / `pokbot-node` images with `pokbot_core` baked
    in (drop the `core/src` mount); `--name pokbot-<tid>-<bot>` and
    `--label pokbot.tournament=<tid>`; `docker rm -f` on close; orphan reaper at startup and on
    a 5-minute systemd timer.
-5. **Abuse limits**: require a token for bot `/ws/play`; max 3 `/ws/play` and 5 `/ws/watch`
+5. **Abuse limits**: done: GitHub sign-in required for `/ws/play` and chat. To do: max 3 `/ws/play` and 5 `/ws/watch`
    per IP/token; 5 uploads/hour and 3 bots per user; chat already rate-limited (5 per 10 s).
    Client IPs forwarded by Vercel (`x-forwarded-for`) are spoofable, so token-based limits are
    the real ones.
@@ -78,53 +78,52 @@ Project settings: production branch `release`; env `SITE=https://pokbot.dev`,
 `API=https://api.pokbot.dev`. DNS for `api` is an A record to the EC2 Elastic IP, managed in
 Vercel DNS. Hobby is non-commercial only; use Pro ($20/member) for anything commercial.
 
-## AWS
+## AWS: Lightsail, not EC2
 
-- **Compute:** one `c7g.xlarge` (Graviton, 4 vCPU / 8 GB, Ubuntu 24.04 arm64). A Graviton
-  vCPU is a full core, so `--cpus=1` per bot is real compute. gVisor supports arm64 (`systrap`
-  platform). Base images and wheels are multi-arch / pure Python. Start with
-  `POKBOT_MAX_CONTAINERS=3`; scale up in place to `2xlarge`/`4xlarge`.
-- **Server on the host, not in a container:** systemd unit runs `pokbot-server` as user
-  `pokbot` (in the `docker` group; root-equivalent, so treat the server as trusted).
+Bots get a 5 ms compute cap per decision and each tournament has a 25-minute budget, so the
+box sits idle most of the half hour and only needs short bursts. That fits a small burstable
+instance; no dedicated cores needed.
+
+- **Compute:** one AWS Lightsail Linux instance, **$12/month plan** (2 GB RAM, 2 vCPU burstable,
+  60 GB SSD, 3 TB transfer, public IPv4 included), Ubuntu 24.04. Move to the $24 plan (4 GB)
+  when concurrent containers or entrants grow. Lightsail bills a flat price: when burst credits
+  run out the CPU is throttled rather than billed, so there are no surprise charges.
+  Start with `POKBOT_MAX_CONTAINERS=2`.
+- **Server on the host, not in a container:** systemd runs `pokbot-server` as user `pokbot`
+  (in the `docker` group; root-equivalent, so treat the server as trusted).
   `sandbox.docker_argv` bind-mounts host paths, which breaks inside a container.
-- **Network:** Elastic IP; security group inbound 80/443 only, no SSH; IMDSv2 required with hop
-  limit 1.
+- **Sandbox:** Docker + gVisor (`runsc`) on the instance.
+- **Network:** Lightsail static IP (free while attached). Lightsail firewall: 80/443 open; 22
+  only from your own IP (or closed, using the Lightsail browser SSH).
 - **TLS:** Caddy on the instance (automatic ACME, websockets with no idle cutoff, per-IP rate
-  limiting), proxying to `127.0.0.1:8000`. No ALB: it adds ~$18/month and its 60 s idle
-  timeout would need raising for tournament websockets.
-- **Access:** SSM Session Manager only. Instance role: `AmazonSSMManagedInstanceCore`,
-  `ssm:GetParametersByPath` on `/pokbot/prod/*`, `s3:PutObject` on the backup bucket,
-  CloudWatch agent.
-- **Secrets:** SSM Parameter Store SecureStrings under `/pokbot/prod/`, rendered by
-  `ExecStartPre` to `/run/pokbot/env` (tmpfs, 0600) and loaded with `EnvironmentFile=`. Never
-  passed into bot containers.
-- **Storage:** 30 GB gp3 root + 20 GB gp3 data volume (`POKBOT_DATA`, Docker root). DLM daily
-  snapshots (keep 14). Hourly `aws s3 sync` of `data/` to a versioned bucket with a 30-day
-  lifecycle.
-- **Observability:** CloudWatch agent ships journald + Caddy logs; the server emits EMF metrics
-  `TournamentDuration`, `TournamentCrash`, `ActiveContainers`, `WsConnections`. SNS email
-  alarms: duration > 1680 s, any crash, no tournament for 65 minutes while entrants > 0,
-  disk > 80%, CPU at 100% for 15 minutes. EC2 auto-recover on `StatusCheckFailed_System`.
-  External uptime checks on `https://pokbot.dev/install.sh` and
-  `https://api.pokbot.dev/api/schedule`.
-- **Not used:** Fargate (no Docker/gVisor inside tasks), ECS on EC2 (server would need the
-  Docker socket inside a container), Lambda (15-minute cap, no long websockets), API Gateway
-  WebSockets (would mean rewriting the Hub).
+  limits), proxying to `127.0.0.1:8000`. No load balancer.
+- **Secrets:** `/etc/pokbot/env` (0600) loaded with `EnvironmentFile=`. Never passed into bot
+  containers. Only `POKBOT_GITHUB_CLIENT_ID` is needed (device flow has no client secret).
+- **Backups:** Lightsail automatic daily snapshots (~$3/month for 60 GB) plus an hourly copy
+  of `data/` to an S3 bucket (cents).
+- **Monitoring:** Lightsail's built-in CPU/network metric alarms (free) and an external uptime
+  check on `https://pokbot.dev/install.sh` and `https://api.pokbot.dev/api/schedule`. Alert on
+  a tournament longer than 28 minutes from the server log.
+- **Not used:** EC2 `c7g.xlarge` (~$106/month; sized for unbounded compute that the 5 ms cap
+  removes), Fargate (no Docker/gVisor inside tasks), Lambda (15-minute cap, no long
+  websockets), ALB (~$18/month for one box).
+- **Even cheaper:** the $7 plan (1 GB) works for a soft launch with `POKBOT_MAX_CONTAINERS=1`.
+  Outside AWS, a Hetzner CAX11 (~€4/month) does the same job.
 
-## Deploy (GitHub Actions, on a `v*` tag)
+## Deploy (pull-based; no inbound SSH from CI)
 
-1. `uv sync --frozen`, `ruff check`, `ruff format --check`, `pytest -q`. A sandbox job on an
-   `ubuntu-24.04-arm` runner builds the arm64 bot images and runs a real gVisor sandbox test.
-2. Upload the release tarball (repo + `uv.lock`) to S3, using GitHub OIDC to assume a deploy
-   role (no long-lived AWS keys).
-3. `aws ssm send-command` runs `/opt/pokbot/deploy.sh` on the instance:
-   1. Wait until `/api/schedule` reports no running tournament (up to 30 minutes), and abort
-      if the next start is under 5 minutes away.
-   2. Fetch the tarball, `docker pull` pinned images, `uv sync --frozen`,
-      `systemctl restart pokbot`.
-   3. Health-check; roll back to the previous release symlink on failure.
-4. Push the tag commit to `release`; Vercel builds and deploys the site. The server goes first,
-   so new wheels never meet an older server. PRs get Vercel preview deploys.
+1. GitHub Actions on a `v*` tag: `uv sync --frozen`, `ruff check`, `ruff format --check`,
+   `pytest -q`, and a sandbox job that builds the bot images and runs a real gVisor test.
+   It publishes the release tarball (repo + `uv.lock`) as a GitHub release asset.
+2. On the instance, a systemd timer (`pokbot-deploy.timer`, every 2 minutes) runs
+   `/opt/pokbot/deploy.sh`. It checks for a newer release, and only when `/api/schedule` reports
+   no running tournament and the next start is more than 5 minutes away it fetches the tarball,
+   verifies its checksum, `docker pull`s pinned images, runs `uv sync --frozen`, and
+   `systemctl restart pokbot`. It health-checks and rolls back to the previous release symlink
+   on failure.
+3. Pushing the tag commit to `release` makes Vercel build and deploy the site. Because the
+   server updates within minutes and the site deploys from the same tag, wheels and server
+   protocol stay in step. PRs get Vercel preview deploys.
 
 ## Rollout
 
@@ -135,28 +134,25 @@ Vercel DNS. Hobby is non-commercial only; use Pro ($20/member) for anything comm
 3. Container semaphore, bot time limit, match deadline.
 4. Container labels and orphan reaper.
 5. Rate limits and Origin checks.
-6. AWS (Terraform or a runbook): EC2, EIP, security group, role, SSM parameters, DLM, S3,
-   CloudWatch agent and alarms; install Docker, gVisor, Caddy.
+6. Lightsail instance, static IP, firewall, snapshots, S3 bucket; install Docker, gVisor,
+   Caddy and the deploy timer.
 7. Register the GitHub OAuth app (device flow on) and set `POKBOT_GITHUB_CLIENT_ID`.
 8. Vercel project and DNS.
 9. Tag workflow.
 10. Soft launch with `POKBOT_BOT_HANDS=2000`; raise to 10,000 once p95 tournament time is
     under 15 minutes.
 
-**Later:** SQLite in place of `store.py`; separate runner hosts (Auto Scaling group of
-`c7g`) behind a `RunnerClient` in `sandbox.make_player`; Redis pub/sub for `Hub.on_event`,
-lobby and chat fan-out, with a Redis `SET NX` leader for the scheduler, plus RDS Postgres;
+**Later:** SQLite in place of `store.py`; separate runner instances behind a `RunnerClient` in `sandbox.make_player`; Redis pub/sub for `Hub.on_event`,
+lobby and chat fan-out, with a Redis `SET NX` leader for the scheduler, plus Postgres;
 Firecracker if gVisor overhead hurts; reconnect handling; hand logs in S3.
 
-## Monthly cost (MVP, us-east-1, approximate)
+## Monthly cost (MVP)
 
 | Item | Cost |
 |---|---|
-| `c7g.xlarge` on-demand | ~$106 (~$67 with a 1-year Compute Savings Plan) |
-| EBS 50 GB gp3 + snapshots | ~$5 |
-| Elastic IP (public IPv4) | ~$3.65 |
-| Data transfer | ~$0 (first 100 GB out free; wheels are on Vercel) |
-| CloudWatch logs + alarms | ~$3–5 |
-| S3 backups | < $1 |
-| Vercel | $0 Hobby (non-commercial) or $20/member Pro |
-| **Total** | **~$120 on-demand, ~$80 with a Savings Plan, +$20 for Vercel Pro** |
+| Lightsail $12 plan (2 GB, 2 vCPU burst, 60 GB SSD, 3 TB transfer, IPv4) | $12 |
+| Lightsail automatic snapshots | ~$3 |
+| S3 backups of `data/` | < $1 |
+| Monitoring (Lightsail alarms + free uptime checker) | $0 |
+| Vercel Hobby (non-commercial) | $0 |
+| **Total** | **~$15/month** (~$10 on the $7 plan; +$20 if Vercel Pro is needed for commercial use) |

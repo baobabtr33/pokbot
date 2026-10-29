@@ -18,8 +18,8 @@ from pokbot_core.engine.variants import VARIANTS, get_variant
 from pydantic import BaseModel
 
 from . import sandbox
-from .config import settings
 from .chat import ChatError
+from .config import settings
 from .github import DeviceFlow, GitHubError
 from .hub import Conn, Hub
 from .store import Store, StoreError, check_name
@@ -100,9 +100,9 @@ def create_app(start_scheduler: bool = True) -> FastAPI:
 
     @app.post("/api/register")
     def register(body: RegisterBody) -> dict:
-        """Name-only sign-up for dev servers. Disabled once GitHub login is configured."""
-        if device is not None:
-            raise HTTPException(403, "this server uses GitHub login; run `pokbot login`")
+        """Name-only sign-up for local development (POKBOT_DEV_LOGIN=1). Production uses GitHub."""
+        if not settings.dev_login:
+            raise HTTPException(403, "sign in with GitHub: run `pokbot login`")
         try:
             token = store.register(body.name)
         except StoreError as e:
@@ -118,6 +118,8 @@ def create_app(start_scheduler: bool = True) -> FastAPI:
             check_name(name)
         except StoreError as e:
             raise HTTPException(400, str(e)) from None
+        if name != user and not name.startswith(user + "-"):
+            raise HTTPException(400, f"bot names must be `{user}` or start with `{user}-`")
         if name in hub.lobby or name in hub.participants:
             raise HTTPException(409, f"{name} is connected live right now")
         data = await request.body()
@@ -202,8 +204,10 @@ def create_app(start_scheduler: bool = True) -> FastAPI:
             if hello.get("type") != "hello":
                 raise ValueError("first message must be hello")
             get_variant(hello.get("game", "holdem"))
+            if not user:
+                raise ValueError("sign in with GitHub first: run `pokbot login`")
             kind = "human" if hello.get("kind") == "human" else "bot"
-            name = user if kind == "human" and user else hello.get("name", "")
+            name = user  # one live seat per account; the name is never client-chosen
             check_name(name)
             conn = Conn(ws, name, kind, user=user)
             hub.join(conn)

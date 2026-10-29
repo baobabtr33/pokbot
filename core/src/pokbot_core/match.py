@@ -26,8 +26,8 @@ class MatchConfig:
     stack: int = 200
     blinds: tuple[int, int] = (1, 2)
     seed: int | None = None
-    time_ms: int = 1000
-    timebank_ms: int = 60_000
+    time_ms: int = 5  # per-decision compute cap for bots, in milliseconds
+    timebank_ms: int = 1000  # per-match reserve for GC pauses and cold starts
     human_time_ms: int = 60_000
     duplicate: bool = True  # heads-up only: replay each deck with seats swapped
 
@@ -71,6 +71,7 @@ class Match:
         config: MatchConfig | None = None,
         on_event: EventSink | None = None,
         match_id: str | None = None,
+        deadline: float | None = None,
     ) -> None:
         self.config = config or MatchConfig()
         self.variant = get_variant(self.config.game)
@@ -85,6 +86,8 @@ class Match:
         self.hands_played = 0
         self.started_at = 0.0
         self._stop = False
+        self.deadline = deadline  # time.monotonic() after which no new hand starts
+        self.stopped_early = False
 
     def stop(self) -> None:
         self._stop = True
@@ -134,6 +137,9 @@ class Match:
             )
             for hand_no in range(cfg.hands):
                 if self._stop:
+                    break
+                if self.deadline is not None and time.monotonic() >= self.deadline:
+                    self.stopped_early = True
                     break
                 if duplicate and hand_no >= half:
                     base, order = hand_no - half, list(reversed(range(n)))
@@ -284,6 +290,7 @@ class Match:
             "game": self.config.game,
             "seed": self.seed,
             "hands": self.hands_played,
+            "stopped_early": self.stopped_early,
             "elapsed": round(elapsed, 3),
             "players": [s.to_dict(bb) for s in self.stats],
         }

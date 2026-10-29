@@ -131,7 +131,8 @@ class Store:
                 for s in table["standings"]:
                     if s["kind"] == "house":
                         continue
-                    row = board.setdefault(s["name"], {"name": s["name"], "titles": 0, "tournaments": 0, "chips": 0, "hands": 0})
+                    row = board.setdefault(s["name"], {"name": s["name"], "points": 0, "titles": 0, "tournaments": 0, "chips": 0, "hands": 0})
+                    row.setdefault("points", 0)
                     row["chips"] += s["chips"]
                     row["hands"] += s["hands"]
                     if s["name"] not in seen:
@@ -139,6 +140,9 @@ class Store:
                         seen.add(s["name"])
             if result.get("winner") in board:
                 board[result["winner"]]["titles"] += 1
+            for name, pts in result.get("points", {}).items():
+                if name in board:
+                    board[name]["points"] += pts
             summary = {k: result[k] for k in ("tournament_id", "winner", "rounds")}
             summary["finished"] = datetime.now(UTC).isoformat()
             summary["entrants"] = len(seen)
@@ -147,4 +151,4 @@ class Store:
 
     def leaderboard(self) -> list[dict]:
         rows = list(self.state["leaderboard"].values())
-        return sorted(rows, key=lambda r: (-r["titles"], -r["chips"]))
+        return sorted(rows, key=lambda r: (-r.get("points", 0), -r["titles"], -r["chips"]))

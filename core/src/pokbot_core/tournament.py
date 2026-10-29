@@ -12,12 +12,14 @@ import inspect
 import math
 import random
 import secrets
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 
 from .match import EventSink, Match, MatchConfig
 from .players import HouseBot, Player
+from .points import award_points
 
 ADVANCE_PER_TABLE = 2
 
@@ -29,7 +31,7 @@ class TournamentConfig:
     human_hands: int = 30  # hands per table when a human is seated
     match: MatchConfig = field(default_factory=MatchConfig)
     seed: int | None = None
-
+    budget_s: float | None = None  # wall-clock budget for the whole tournament; tables stop early
     def __post_init__(self) -> None:
         if self.table_size <= ADVANCE_PER_TABLE:
             raise ValueError(f"table_size must be > {ADVANCE_PER_TABLE} so the field shrinks")
@@ -47,6 +49,15 @@ def seat_tables(entrants: list[Player], table_size: int, rng: random.Random) -> 
     rng.shuffle(pool)
     count = max(1, math.ceil(len(pool) / table_size))
     return [pool[i::count] for i in range(count)]
+
+
+def rounds_needed(entrants: int, table_size: int) -> int:
+    """Rounds until the field fits one table (top 2 per table advance), final included."""
+    rounds = 1
+    while entrants > table_size:
+        entrants = ADVANCE_PER_TABLE * math.ceil(entrants / table_size)
+        rounds += 1
+    return rounds
 
 
 def rank_table(summary: dict, seated: list[Player]) -> list[int]:
@@ -115,9 +126,15 @@ class Tournament:
             }
         )
 
+        started = time.monotonic()
         round_no = 0
         while True:
             round_no += 1
+            deadline = None
+            if self.config.budget_s is not None:
+                # Split the remaining budget evenly over the rounds still to play.
+                left = self.config.budget_s - (time.monotonic() - started)
+                deadline = time.monotonic() + max(left, 0) / rounds_needed(len(alive), self.config.table_size)
             final = len(alive) <= self.config.table_size
             tables = [alive] if final else seat_tables(alive, self.config.table_size, self.rng)
             seated_tables = [self._fill(t, round_no) for t in tables]
@@ -130,7 +147,7 @@ class Tournament:
                 }
             )
             results = await asyncio.gather(
-                *(self._play_table(round_no, ti, t, final) for ti, t in enumerate(seated_tables))
+                *(self._play_table(round_no, ti, t, final, deadline) for ti, t in enumerate(seated_tables))
             )
             alive = [p for advancing in results for p in advancing]
             await self._emit(
@@ -148,11 +165,12 @@ class Tournament:
             "rounds": round_no,
             "tables": self.results,
         }
+        result["points"] = award_points(result)
         await self._emit(result)
         return result
 
     async def _play_table(
-        self, round_no: int, table_no: int, seated: list[Player], final: bool
+        self, round_no: int, table_no: int, seated: list[Player], final: bool, deadline: float | None = None
     ) -> list[Player]:
         table_id = f"r{round_no}t{table_no + 1}"
         has_human = any(p.kind == "human" for p in seated)
@@ -162,7 +180,7 @@ class Tournament:
         async def forward(event: dict) -> None:
             await self._emit({"type": "table", "table": table_id, "round": round_no, "event": event})
 
-        match = Match(seated, cfg, on_event=forward, match_id=f"{self.id}-{table_id}")
+        match = Match(seated, cfg, on_event=forward, match_id=f"{self.id}-{table_id}", deadline=deadline)
         self.matches[table_id] = match
         summary = await match.run()
         order = rank_table(summary, seated)

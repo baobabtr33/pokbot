@@ -64,4 +64,7 @@ class PlainPrinter:
         elif kind == "tournament_end":
             self.result = event
             console.print(f"[bold yellow]{WINNER}[/]")
-            console.print(f"[bold yellow]  🏆  {event['winner']}  🏆[/]  ({event['rounds']} rounds)\n")
+            console.print(f"[bold yellow]  🏆  {event['winner']}  🏆[/]  ({event['rounds']} rounds)")
+            ranked = sorted(event.get("points", {}).items(), key=lambda kv: -kv[1])
+            if ranked:
+                console.print("  points: " + " · ".join(f"{n} +{p}" for n, p in ranked) + "\n")

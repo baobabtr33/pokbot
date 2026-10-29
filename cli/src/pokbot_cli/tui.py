@@ -11,8 +11,8 @@ from datetime import UTC, datetime
 from pokbot_core.display import ACTION_WORDS, is_red, pretty_card, pretty_cards
 from pokbot_core.players import Player
 from rich.align import Align
-from rich.markup import escape
 from rich.console import Group
+from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -319,7 +319,10 @@ class PokbotApp(App[None]):
             winner = event["winner"] or "nobody"
             self.status = f"champion: {winner}"
             self.log_line(f"[bold yellow]🏆 Champion: {winner}[/] after {event['rounds']} round(s)")
-            await self.push_screen(WinnerScreen(winner, f"won tournament {event['tournament_id']} · {event['rounds']} round(s)"))
+            ranked = sorted(event.get("points", {}).items(), key=lambda kv: -kv[1])
+            if ranked:
+                self.log_line("Points: " + " · ".join(f"[bold]{escape(n)}[/] +{p}" for n, p in ranked))
+            await self.push_screen(WinnerScreen(winner, f"won tournament {event['tournament_id']} · {event['rounds']} round(s) · +{event.get('points', {}).get(winner, 0)} points"))
         elif kind == "match_end_local":
             self.status = "match finished"
 

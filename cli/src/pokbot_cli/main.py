@@ -155,6 +155,10 @@ def _play_local(files, hero, human, game, hands, table_size, seed, plain, as_jso
 def _play_online(target, hero, game, plain, as_json, server) -> int:
     url = config.server_url(server)
     token = config.token()
+    if not token:
+        err.print("[red]sign in with GitHub first: pokbot login[/]")
+        return EXIT_USAGE
+    hero = config.load().get("name") or hero  # the server seats you under your account name
     bot = SubprocessBot.from_file(target, name=hero) if target else None
 
     try:
@@ -183,11 +187,15 @@ def _play_online(target, hero, game, plain, as_json, server) -> int:
 def _do_upload(target: str, name: str | None, server: str | None) -> None:
     url = config.server_url(server)
     token = config.token()
-    if not token:
-        err.print("[red]not logged in; run `pokbot login` first[/]")
+    login_name = config.load().get("name")
+    if not token or not login_name:
+        err.print("[red]sign in first: pokbot login[/]")
         raise typer.Exit(EXIT_USAGE)
+    # Bot names are namespaced by account: `alice` or `alice-<suffix>`.
+    if name and name != login_name and not name.startswith(login_name + "-"):
+        name = f"{login_name}-{name}"
     try:
-        info = online.upload(url, token, target, name)
+        info = online.upload(url, token, target, name or login_name)
     except (online.ServerError, ValueError) as e:
         err.print(f"[red]upload failed:[/] {e}")
         raise typer.Exit(EXIT_SERVER) from None
@@ -199,7 +207,7 @@ def _do_upload(target: str, name: str | None, server: str | None) -> None:
 def validate(
     file: Annotated[str, typer.Argument(help="Bot file or folder to check.")],
     hands: Annotated[int, typer.Option("--hands", help="Hands to play against [BOT]s.")] = 500,
-    time_ms: Annotated[int, typer.Option("--time-ms", help="Per-decision time limit.")] = 1000,
+    time_ms: Annotated[int, typer.Option("--time-ms", help="Per-decision compute cap (server default 5 ms).")] = 5,
     strict: Annotated[bool, typer.Option("--strict", help="Treat warnings as failures.")] = False,
     game: GameOpt = "holdem",
     as_json: Annotated[bool, typer.Option("--json")] = False,
@@ -281,7 +289,7 @@ def _copy_to_clipboard(text: str) -> bool:
 
 @app.command()
 def login(
-    name: Annotated[str | None, typer.Option("--name", "-n", help="Dev servers without GitHub login only.")] = None,
+    name: Annotated[str | None, typer.Option("--name", "-n", hidden=True, help="Dev servers (POKBOT_DEV_LOGIN=1) only.")] = None,
     server: ServerOpt = None,
 ) -> None:
     """Sign in with GitHub (device code). Stores your API key in ~/.config/pokbot/credentials."""
@@ -405,11 +413,11 @@ def leaderboard(server: ServerOpt = None) -> None:
     from rich.table import Table
 
     table = Table(title="pokbot leaderboard")
-    for col in ("#", "Player", "Titles", "Tournaments", "Chips", "Hands"):
+    for col in ("#", "Player", "Points", "Titles", "Tournaments", "Chips", "Hands"):
         table.add_column(col)
     for i, row in enumerate(info["players"], 1):
-        table.add_row(str(i), row["name"], str(row["titles"]), str(row["tournaments"]),
-                      f"{row['chips']:+d}", str(row["hands"]))
+        table.add_row(str(i), row["name"], f"[bold]{row.get('points', 0)}[/]", str(row["titles"]),
+                      str(row["tournaments"]), f"{row['chips']:+d}", str(row["hands"]))
     console.print(table)
 
 

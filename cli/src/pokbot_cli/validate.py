@@ -33,7 +33,7 @@ class Report:
         return {"target": self.target, "ok": self.ok(), "checks": [c.__dict__ for c in self.checks]}
 
 
-async def validate(target: str, hands: int = 500, time_ms: int = 1000, game: str = "holdem") -> Report:
+async def validate(target: str, hands: int = 500, time_ms: int = 5, game: str = "holdem") -> Report:
     report = Report(target)
 
     path = Path(target.split(":")[0])
@@ -53,7 +53,7 @@ async def validate(target: str, hands: int = 500, time_ms: int = 1000, game: str
     for seats, n_hands in ((2, max(hands // 2, 2)), (6, max(hands // 2, 1))):
         bot = SubprocessBot("candidate", argv)
         opponents = [HouseBot(f"House{i}", style=("tight", "random", "caller")[i % 3], seed=i) for i in range(seats - 1)]
-        cfg = MatchConfig(game=game, hands=n_hands, seed=1234 + seats, time_ms=time_ms, timebank_ms=0)
+        cfg = MatchConfig(game=game, hands=n_hands, seed=1234 + seats, time_ms=time_ms, timebank_ms=1000)
         summary = await Match([bot, *opponents], cfg).run()
         me = summary["players"][0]
         for k in totals:

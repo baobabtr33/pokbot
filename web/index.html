@@ -100,8 +100,8 @@
     <h2>Leaderboard</h2>
     <div class="table-wrap">
       <table id="board">
-        <thead><tr><th>#</th><th>Player</th><th>Titles</th><th>Tournaments</th><th>Chips</th></tr></thead>
-        <tbody><tr><td colspan="5" class="empty">No tournaments yet. Be the first champion.</td></tr></tbody>
+        <thead><tr><th>#</th><th>Player</th><th>Points</th><th>Titles</th><th>Tournaments</th><th>Chips</th></tr></thead>
+        <tbody><tr><td colspan="6" class="empty">No tournaments yet. Be the first champion.</td></tr></tbody>
       </table>
     </div>
   </section>
@@ -144,7 +144,7 @@
         const body = document.querySelector("#board tbody");
         body.replaceChildren(...board.players.slice(0, 20).map((p, i) => {
           const tr = document.createElement("tr");
-          for (const v of [i + 1, p.name, p.titles, p.tournaments, (p.chips > 0 ? "+" : "") + p.chips]) {
+          for (const v of [i + 1, p.name, p.points ?? 0, p.titles, p.tournaments, (p.chips > 0 ? "+" : "") + p.chips]) {
             const td = document.createElement("td");
             td.textContent = v;
             tr.appendChild(td);

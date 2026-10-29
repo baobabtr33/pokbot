@@ -93,8 +93,13 @@ pokbot login
   clipboard, prints `› paste it at https://github.com/login/device`, polls, then stores a
   pokbot API key (`pk_...`). The CLI never sees a GitHub token; the server discards it after
   reading `/user`. Needs `POKBOT_GITHUB_CLIENT_ID` (OAuth app with device flow enabled).
-- Without GitHub configured (dev), `pokbot login --name NAME` uses `/api/register`.
-  `/api/register` returns 403 once GitHub login is configured.
+- **GitHub is the only sign-in.** No OAuth scopes are requested; the server reads only `id`
+  and `login` from GitHub's `/user`, discards the GitHub token, and stores
+  `{name: login, github_id}` per API key. Never add email/avatar/profile fields.
+- Signing in is required to play live (`/ws/play`), upload, and chat. The live seat name is
+  always the account login; uploaded bot names must be `<login>` or `<login>-<suffix>`.
+- Dev only: `POKBOT_DEV_LOGIN=1` enables name-only `/api/register` (`pokbot login --name`,
+  hidden flag). Tests use it. It returns 403 otherwise.
 
 ## The `pokbot` CLI
 
@@ -124,6 +129,9 @@ pokbot login | logout | whoami | games | schedule | leaderboard
   human. House bots play every hand but **never advance** (so the field always shrinks and the
   winner is always a real entrant). Names starting with `[BOT]` are reserved.
 - Ranking at a table: chips won, then hands won, then seat order.
+- **Points** (`core/.../points.py`, real entrants only): +1 entry, +10 per table advanced
+  from, final-table place 100/60/40/30/20/10, other finalists 5. Sent as `points` in
+  `tournament_end`; the leaderboard sorts by points, then titles, then chips.
 - Hands per table: 10,000 when only bots are seated (`POKBOT_BOT_HANDS`), 30 when a human is
   seated (`POKBOT_HUMAN_HANDS`). Stacks reset to 200 (100 bb) every hand; blinds 1/2.
 - Heads-up matches use duplicate seating (second half replays the same decks with seats
@@ -152,7 +160,12 @@ Bot -> server: **one line per `action_request`, a single capital letter**:
 
 JSON `{"action":"R","amount":24}` is also accepted. Lowercase is tolerated.
 - Illegal or malformed = check if free, else fold; counted as `illegal`.
-- Timeout: `time_ms` per decision + 60 s time bank per match; then check/fold, counted.
+- Time cap: **5 ms per decision** (`POKBOT_TIME_MS`) plus a 1 s time bank per match
+  (`POKBOT_TIMEBANK_MS`); then check/fold, counted as a timeout. Live websocket bots get an
+  extra `POKBOT_LIVE_NETWORK_MS` (150) for round-trip latency. Humans get 60 s.
+- Each tournament has a wall-clock budget (`POKBOT_TOURNAMENT_BUDGET_S`, 1500 s) split evenly
+  over the rounds left (`rounds_needed`); a table stops starting new hands at its deadline and
+  ranks on what was played (`stopped_early` in the summary).
 - Late replies to timed-out requests are discarded (subprocess: skip-count; websocket: `req` id
   echoed by the client).
 - Cards on the wire are `Ah`, `Td`; people see `A♥`, `10♦` (red suits red) via `display.py`.
@@ -232,8 +245,9 @@ an engine test without checking the actual poker rule.
 
 ## Deployment
 
-Planned: Vercel for the site, `install.sh` and wheels; one AWS EC2 instance for
-`pokbot-server` and the Docker/gVisor sandbox. See `docs/DEPLOY.md` (not implemented yet).
+Planned: Vercel for the site, `install.sh` and wheels; one AWS Lightsail instance ($12 plan)
+for `pokbot-server` and the Docker/gVisor sandbox, ~$15/month total. See `docs/DEPLOY.md`
+(not implemented yet).
 
 ## Not done yet
 

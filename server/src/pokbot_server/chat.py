@@ -11,7 +11,7 @@ MAX_LEN = 280
 HISTORY = 50
 RATE_COUNT = 5  # messages
 RATE_WINDOW_S = 10.0  # per this many seconds, per connection
-CONTROL = re.compile(r"[\x00-\x1f\x7f​-‏‪-‮]")
+CONTROL = re.compile("[\x00-\x1f\x7f\u200b-\u200f\u202a-\u202e]")  # control + bidi/zero-width
 
 
 class ChatError(ValueError):
