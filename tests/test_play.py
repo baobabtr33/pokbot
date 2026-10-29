@@ -244,3 +244,24 @@ async def test_parallel_table_limit_still_finishes_on_budget():
     assert time.monotonic() - start < 5
     assert result["winner"]
     assert all(s["hands"] > 0 for t in result["tables"] for s in t["standings"])
+
+
+def test_seo_and_agent_pages_use_public_url(tmp_path, monkeypatch):
+    import pokbot_server.app as server_app
+    from pokbot_server.config import Settings
+
+    monkeypatch.setattr(
+        server_app, "settings", Settings(data_dir=tmp_path, public_url="https://pokbot.example")
+    )
+    with TestClient(server_app.create_app(start_scheduler=False)) as client:
+        for path in ("/", "/index.html", "/llms.txt", "/bots.md"):
+            r = client.get(path)
+            assert r.status_code == 200, path
+            assert "__POKBOT_BASE__" not in r.text and "https://pokbot.example" in r.text, path
+        page = client.get("/").text
+        assert '<link rel="canonical" href="https://pokbot.example/"' in page
+        assert "https://pokbot.example/og.png" in page
+        assert "Sitemap: https://pokbot.example/sitemap.xml" in client.get("/robots.txt").text
+        assert "<loc>https://pokbot.example/bots.md</loc>" in client.get("/sitemap.xml").text
+        assert client.get("/style.css").status_code == 200
+        assert client.get("/openapi.json").status_code == 200

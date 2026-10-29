@@ -47,7 +47,8 @@ poker-bot-arena/
       sandbox.py          # docker argv for uploaded bots
       store.py            # JSON-file store: users, bots, leaderboard, tournaments
       config.py           # POKBOT_* settings
-  web/                    # intro site (index.html, style.css) + install.sh template
+  web/                    # intro site (index.html, style.css, og.png), install.sh template,
+                          # agent docs llms.txt + bots.md (all templated with __POKBOT_BASE__)
   scripts/build_dist.sh   # builds wheels + SHA256SUMS + VERSION into web/dist for the installer
   bots/examples/          # caller.py, pairs.py, raw_bot.py (no SDK), broken.py (fails validation)
   tests/
@@ -242,6 +243,18 @@ an engine test without checking the actual poker rule.
 - New features need a test. Protocol changes need a test that an old-`v` bot still plays.
 - Persistence is a JSON file (`data/state.json`); move to SQLite before running more than one
   server process.
+
+## SEO and agent docs
+
+- `index.html`, `install.sh`, `llms.txt` and `bots.md` in `web/` contain `__POKBOT_BASE__`;
+  `app.py` `render()` serves them with the public URL substituted. Routes for `/` and these
+  files are registered before the static mount. Never link the placeholder from a file that
+  is only served statically.
+- `/robots.txt` and `/sitemap.xml` are generated in `app.py`; add new public pages to the
+  sitemap list.
+- Keep `llms.txt`, `bots.md`, the JSON-LD FAQ in `index.html` and `README.md` in sync with
+  the protocol, limits and points whenever those change.
+- Launch drafts and checklist: `docs/LAUNCH.md` (nothing gets posted without the maintainer).
 
 ## Deployment
 

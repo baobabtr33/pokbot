@@ -1,0 +1,50 @@
+# pokbot
+
+> pokbot runs free No-Limit Texas Hold'em knockout tournaments for poker bots every 30 minutes (at :00 and :30 UTC). Anyone can enter a bot (any language that reads stdin and writes stdout) or play by hand from the terminal. Tables seat six; the top two at each table advance until one champion remains. Empty seats are filled by house bots named "[BOT] ...", which never advance.
+
+Base URL: __POKBOT_BASE__
+
+## Join in four commands
+
+```
+curl -fsSL __POKBOT_BASE__/install.sh | sh     # installs the `pokbot` CLI (macOS/Linux)
+pokbot login                                   # GitHub device-code sign-in; stores only your GitHub id + username
+pokbot init mybot && pokbot validate mybot     # scaffold a bot and check it offline
+pokbot play mybot                              # join the next tournament live over a websocket
+```
+
+Or `pokbot play mybot --upload` to have the server enter the bot in every tournament (runs sandboxed), or `pokbot play` with no file to play yourself.
+
+## The whole bot protocol in brief
+
+- The server sends one JSON object per line on stdin: `match_start`, `hand_start`, `action_request`, `hand_end`, `match_end`.
+- Answer every `action_request` with one line: `F` fold, `X` check, `C` call, `R 24` raise to 24 (street total), `A` all-in.
+- `action_request` includes `hole` (e.g. `["Ah","Kd"]`), `board`, `pot`, `to_call`, `min_raise`, `max_raise`, `legal` (e.g. `["F","C","R"]`), `stacks`, `bets`, `button`, `history`.
+- Time limit: 5 ms per decision (live websocket bots get +150 ms for network), plus a 1 s bank per match. Late or illegal replies become check/fold.
+- Stacks reset to 200 chips (100 big blinds) every hand; blinds 1/2. Bot tables play up to 10,000 hands within the tournament's time budget.
+
+Minimal bot (Python, no SDK):
+
+```python
+import json, sys
+for line in sys.stdin:
+    msg = json.loads(line)
+    if msg["type"] == "action_request":
+        print("X" if "X" in msg["legal"] else "C", flush=True)
+```
+
+## Scoring
+
+Points per tournament: +1 entry, +10 per table you advance from, final table 100/60/40/30/20/10 for places 1-6, 5 for other finalists. Leaderboard ranks by points, then titles, then chips.
+
+## Docs
+
+- [Bot author guide](__POKBOT_BASE__/bots.md): full protocol, SDK, rules, limits, examples
+- [API reference](__POKBOT_BASE__/docs): OpenAPI for the HTTP endpoints
+- [Schedule](__POKBOT_BASE__/api/schedule): next start, entrants, players online (JSON)
+- [Leaderboard](__POKBOT_BASE__/api/leaderboard): points, titles, chips (JSON)
+
+## Optional
+
+- [Online now](__POKBOT_BASE__/api/online): presence counts (JSON)
+- [Games](__POKBOT_BASE__/api/games): Texas Hold'em is playable; Omaha, Seven-Card Stud and Five-Card Draw are coming

@@ -135,3 +135,8 @@ footer { color: var(--muted); font-size: 13px; padding: 48px 16px; text-align: c
   display: inline-block; width: 8px; height: 8px; border-radius: 50%;
   background: #3ddc84; box-shadow: 0 0 8px #3ddc84; vertical-align: middle;
 }
+
+a { color: var(--gold); }
+.links { padding-left: 20px; margin: 0; }
+.links li { margin: 4px 0; color: var(--muted); }
+footer a { color: var(--muted); }

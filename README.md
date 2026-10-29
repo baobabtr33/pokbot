@@ -1,0 +1,63 @@
+# pokbot
+
+**Poker bot tournaments every 30 minutes, played from your terminal.**
+
+Write a No-Limit Texas Hold'em bot in any language that reads stdin and writes stdout, or sit
+down yourself. Every :00 and :30 UTC a knockout tournament starts: tables of six, the top two
+at each table advance, and one champion takes the title (with fireworks).
+
+![pokbot](web/og.png)
+
+Live server: https://100-58-68-17.sslip.io
+
+```
+curl -fsSL https://100-58-68-17.sslip.io/install.sh | sh
+pokbot login                 # GitHub device code; stores only your GitHub id and username
+pokbot init mybot            # scaffold a bot
+pokbot validate mybot        # legal moves only, p99 under 5 ms
+pokbot play mybot --local    # practice against [BOT]s
+pokbot play mybot            # join the next tournament live
+pokbot play mybot --upload   # or let the server enter it in every tournament (sandboxed)
+pokbot play                  # play by hand
+```
+
+## A complete bot
+
+```python
+import json, sys
+
+for line in sys.stdin:
+    msg = json.loads(line)
+    if msg["type"] == "action_request":
+        print("X" if "X" in msg["legal"] else "C", flush=True)
+```
+
+Replies are one line: `F` fold, `X` check, `C` call, `R 24` raise to 24, `A` all-in. Each
+decision gets 5 ms of compute (plus a 1 s bank per match). The full protocol, rules and
+scoring are in [web/bots.md](web/bots.md), also served at `/bots.md`; a short version for
+LLM agents is at `/llms.txt`.
+
+## Why
+
+- **Fast feedback.** Bot tables play up to 10,000 hands, so skill beats luck; heads-up uses
+  duplicate seating.
+- **Any language.** Python SDK included; anything that speaks JSON lines works.
+- **Agent friendly.** One-line replies, a strict schema, `/llms.txt`, and a CLI with stable
+  exit codes (`0` ok, `1` invalid bot, `2` usage, `3` server) make it a good target for coding
+  agents.
+- **Points and a leaderboard.** +1 per entry, +10 per table advanced, 100/60/40/30/20/10 at
+  the final table.
+
+## Develop
+
+```
+uv sync
+uv run pytest -q
+uv run pokbot-server --port 8000
+```
+
+Layout: `core/` (engine, protocol, tournament), `cli/` (the `pokbot` command), `server/`
+(FastAPI, scheduler, chat, sandbox), `web/` (site, installer, agent docs). Deployment:
+[docs/DEPLOY.md](docs/DEPLOY.md). Project notes for contributors: [CLAUDE.md](CLAUDE.md).
+
+Texas Hold'em is playable today; Omaha, Seven-Card Stud and Five-Card Draw are next.

@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pokbot_core.bundle import MAX_BUNDLE_BYTES, BundleError, unpack
 from pokbot_core.engine.variants import VARIANTS, get_variant
@@ -92,11 +92,49 @@ def create_app(start_scheduler: bool = True) -> FastAPI:
     def whoami(authorization: str | None = Header(None)) -> dict:
         return {"name": owner(authorization)}
 
+    def base_url(request: Request) -> str:
+        return (settings.public_url or str(request.base_url)).rstrip("/")
+
+    def render(request: Request, filename: str, media_type: str) -> Response:
+        """Serve a web/ file with __POKBOT_BASE__ replaced by the public URL."""
+        path = settings.web_dir / filename
+        if not path.is_file():
+            raise HTTPException(404, "not found")
+        text = path.read_text().replace("__POKBOT_BASE__", base_url(request))
+        return Response(text, media_type=media_type)
+
     @app.get("/install.sh", response_class=PlainTextResponse)
-    def install_script(request: Request) -> PlainTextResponse:
-        base = (settings.public_url or str(request.base_url)).rstrip("/")
-        text = (settings.web_dir / "install.sh").read_text().replace("__POKBOT_BASE__", base)
-        return PlainTextResponse(text, media_type="text/x-shellscript")
+    def install_script(request: Request) -> Response:
+        return render(request, "install.sh", "text/x-shellscript")
+
+    # Templated pages: canonical URLs, Open Graph tags and agent docs need the public host.
+    @app.get("/", include_in_schema=False)
+    @app.get("/index.html", include_in_schema=False)
+    def index(request: Request) -> Response:
+        return render(request, "index.html", "text/html; charset=utf-8")
+
+    @app.get("/llms.txt", include_in_schema=False)
+    def llms_txt(request: Request) -> Response:
+        return render(request, "llms.txt", "text/plain; charset=utf-8")
+
+    @app.get("/bots.md", include_in_schema=False)
+    def bots_md(request: Request) -> Response:
+        return render(request, "bots.md", "text/markdown; charset=utf-8")
+
+    @app.get("/robots.txt", include_in_schema=False)
+    def robots(request: Request) -> Response:
+        text = f"User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: {base_url(request)}/sitemap.xml\n"
+        return Response(text, media_type="text/plain; charset=utf-8")
+
+    @app.get("/sitemap.xml", include_in_schema=False)
+    def sitemap(request: Request) -> Response:
+        base = base_url(request)
+        urls = "".join(f"<url><loc>{base}{p}</loc></url>" for p in ("/", "/bots.md", "/llms.txt"))
+        text = (
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>\n'
+        )
+        return Response(text, media_type="application/xml")
 
     @app.post("/api/register")
     def register(body: RegisterBody) -> dict:
