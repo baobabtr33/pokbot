@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pokbot</title>
+<meta name="description" content="Write a poker bot, enter it from the terminal, win the tournament. Every 30 minutes.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <p class="suits" aria-hidden="true">♠ ♥ ♦ ♣</p>
+    <h1>pokbot</h1>
+    <p class="lede">Write a poker bot. Enter it from your terminal. Beat everyone else's bot.</p>
+    <div class="countdown" aria-live="polite">
+      <span class="label">Next tournament</span>
+      <span id="clock" class="clock">--:--</span>
+      <span id="clock-meta" class="meta">tournaments start every 30 minutes, on the clock</span>
+      <span id="online" class="online" hidden><span class="dot"></span> <b id="online-count">0</b> online</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section>
+    <h2>Get in the game</h2>
+    <pre class="terminal"><code><span class="c"># install</span>
+<span class="p">$</span> curl -fsSL <span class="origin">http://localhost:8000</span>/install.sh | sh
+
+<span class="c"># sign in with GitHub and scaffold a bot</span>
+<span class="p">$</span> pokbot login
+<span class="p">$</span> pokbot init mybot
+
+<span class="c"># check it offline, then practice against [BOT]s</span>
+<span class="p">$</span> pokbot validate mybot
+<span class="p">$</span> pokbot play mybot --local
+
+<span class="c"># enter the next tournament: keep a live socket open…</span>
+<span class="p">$</span> pokbot play mybot
+
+<span class="c"># …or upload it and let the server play every tournament for you</span>
+<span class="p">$</span> pokbot play mybot --upload
+
+<span class="c"># or sit down yourself</span>
+<span class="p">$</span> pokbot play</code></pre>
+  </section>
+
+  <section class="grid">
+    <div class="card-box">
+      <h3>Tournament</h3>
+      <p>Tables of six. The top two at every table move on. Rounds repeat until one final table crowns a single champion.</p>
+    </div>
+    <div class="card-box">
+      <h3>10,000 hands</h3>
+      <p>Bot tables play 10,000 hands so skill beats luck. Stacks reset every hand. Tables with a human play a short session.</p>
+    </div>
+    <div class="card-box">
+      <h3>[BOT] seats</h3>
+      <p>Empty seats are filled by house bots unless every player is human. House bots play hard but never advance.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>One letter per decision</h2>
+    <p>Your bot reads one JSON line per event on stdin and answers each <code>action_request</code> with a single line:</p>
+    <div class="actions">
+      <div><kbd>F</kbd><span>Fold</span></div>
+      <div><kbd>X</kbd><span>Check</span></div>
+      <div><kbd>C</kbd><span>Call</span></div>
+      <div><kbd>R 24</kbd><span>Raise to 24</span></div>
+      <div><kbd>A</kbd><span>All-in</span></div>
+    </div>
+    <pre class="terminal"><code><span class="k">from</span> pokbot_core.sdk <span class="k">import</span> Bot
+
+<span class="k">class</span> <span class="f">MyBot</span>(Bot):
+    <span class="k">def</span> <span class="f">act</span>(self, state):
+        <span class="c"># state["hole"] == ["Ah", "Kd"], state["legal"] == ["F", "C", "R"]</span>
+        <span class="k">if</span> <span class="s">"R"</span> <span class="k">in</span> state[<span class="s">"legal"</span>]:
+            <span class="k">return</span> <span class="s">f"R {state['min_raise']}"</span>
+        <span class="k">return</span> <span class="s">"C"</span> <span class="k">if</span> <span class="s">"C"</span> <span class="k">in</span> state[<span class="s">"legal"</span>] <span class="k">else</span> <span class="s">"X"</span></code></pre>
+    <p class="cards" aria-label="Example hand: ace of hearts, king of spades">
+      <span class="playing red">A♥</span><span class="playing">K♠</span>
+      <span class="sep">on</span>
+      <span class="playing red">10♦</span><span class="playing">J♣</span><span class="playing">Q♠</span>
+    </p>
+  </section>
+
+  <section>
+    <h2>Games</h2>
+    <ul class="games">
+      <li class="live"><strong>Texas Hold'em</strong><span>playable now</span></li>
+      <li><strong>Omaha</strong><span>coming soon</span></li>
+      <li><strong>Seven-Card Stud</strong><span>coming soon</span></li>
+      <li><strong>Five-Card Draw</strong><span>coming soon</span></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Leaderboard</h2>
+    <div class="table-wrap">
+      <table id="board">
+        <thead><tr><th>#</th><th>Player</th><th>Titles</th><th>Tournaments</th><th>Chips</th></tr></thead>
+        <tbody><tr><td colspan="5" class="empty">No tournaments yet. Be the first champion.</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap"><p>pokbot · built for the terminal</p></footer>
+
+<script>
+(() => {
+  let target = null;
+
+  function nextBoundary(intervalS) {
+    const now = Date.now() / 1000;
+    return new Date((Math.floor(now / intervalS) + 1) * intervalS * 1000);
+  }
+
+  function tick() {
+    if (!target) target = nextBoundary(1800);
+    const left = Math.max(0, Math.round((target - Date.now()) / 1000));
+    const m = String(Math.floor(left / 60)).padStart(2, "0");
+    const s = String(left % 60).padStart(2, "0");
+    document.getElementById("clock").textContent = `${m}:${s}`;
+    if (left === 0) { target = null; setTimeout(load, 3000); }
+  }
+
+  async function load() {
+    try {
+      const sched = await (await fetch("/api/schedule")).json();
+      target = new Date(sched.next_tournament);
+      const when = target.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      document.getElementById("clock-meta").textContent =
+        `starts at ${when} · ${sched.entrants} entered` + (sched.running ? " · a tournament is running now" : "");
+
+      const online = await (await fetch("/api/online")).json();
+      document.getElementById("online-count").textContent = online.online;
+      document.getElementById("online").hidden = false;
+
+      const board = await (await fetch("/api/leaderboard")).json();
+      if (board.players.length) {
+        const body = document.querySelector("#board tbody");
+        body.replaceChildren(...board.players.slice(0, 20).map((p, i) => {
+          const tr = document.createElement("tr");
+          for (const v of [i + 1, p.name, p.titles, p.tournaments, (p.chips > 0 ? "+" : "") + p.chips]) {
+            const td = document.createElement("td");
+            td.textContent = v;
+            tr.appendChild(td);
+          }
+          return tr;
+        }));
+      }
+    } catch {
+      /* static preview without a server: keep the local clock */
+    }
+  }
+
+  if (location.protocol.startsWith("http")) {
+    document.querySelectorAll(".origin").forEach((el) => { el.textContent = location.origin; });
+  }
+  load();
+  tick();
+  setInterval(tick, 1000);
+  setInterval(load, 15000);
+})();
+</script>
+</body>
+</html>

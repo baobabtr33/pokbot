@@ -1,0 +1,19 @@
+[project]
+name = "pokbot-cli"
+version = "0.1.0"
+description = "pokbot: play and validate poker bots from the terminal."
+requires-python = ">=3.12"
+dependencies = ["pokbot-core", "typer>=0.12", "rich>=13.7", "textual>=0.80", "websockets>=12"]
+
+[project.scripts]
+pokbot = "pokbot_cli.main:app"
+
+[tool.uv.sources]
+pokbot-core = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pokbot_cli"]

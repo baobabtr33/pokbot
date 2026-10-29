@@ -1,0 +1,137 @@
+:root {
+  --felt: #0b1d13;
+  --felt-2: #0f2a1c;
+  --line: #2c6e49;
+  --gold: #e8d9a0;
+  --text: #e9efe9;
+  --muted: #9fbfa8;
+  --red: #e5484d;
+  --card: #f2f2ee;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--felt);
+  color: var(--text);
+  font: 16px/1.6 var(--mono);
+}
+
+.wrap { max-width: 880px; margin: 0 auto; padding: 0 16px; }
+
+.hero {
+  background: radial-gradient(ellipse at center, #17432c 0%, var(--felt) 70%);
+  border-bottom: 1px solid var(--line);
+  padding: 64px 0 48px;
+  text-align: center;
+}
+
+.suits { color: var(--muted); letter-spacing: 0.6em; margin: 0; }
+.suits::first-letter { color: var(--text); }
+
+h1 {
+  font-size: clamp(48px, 12vw, 96px);
+  margin: 8px 0;
+  color: var(--gold);
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.lede { color: var(--muted); font-size: 18px; margin: 0 0 32px; }
+
+.countdown {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--line);
+  background: var(--felt-2);
+  border-radius: 12px;
+  padding: 16px 32px;
+}
+.countdown .label { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: 0.15em; }
+.countdown .clock { font-size: 48px; color: var(--gold); font-weight: 700; font-variant-numeric: tabular-nums; }
+.countdown .meta { color: var(--muted); font-size: 13px; }
+
+section { padding: 40px 0 8px; }
+h2 { color: var(--gold); font-size: 22px; margin: 0 0 16px; }
+h3 { color: var(--gold); font-size: 16px; margin: 0 0 8px; }
+p { margin: 0 0 16px; }
+
+code { color: var(--gold); }
+
+.terminal {
+  background: #06110b;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px 20px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.7;
+}
+.terminal code { color: var(--text); }
+.terminal .c { color: #5f8a6d; }
+.terminal .p { color: var(--muted); user-select: none; }
+.terminal .k { color: #ff8fa3; }
+.terminal .f { color: #8fd3ff; }
+.terminal .s { color: var(--gold); }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+.card-box { border: 1px solid var(--line); border-radius: 10px; padding: 20px; background: var(--felt-2); }
+.card-box p { color: var(--muted); font-size: 14px; margin: 0; }
+
+.actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 0 0 20px; }
+.actions div { display: flex; align-items: center; gap: 8px; }
+kbd {
+  display: inline-block;
+  min-width: 36px;
+  text-align: center;
+  padding: 4px 10px;
+  background: var(--gold);
+  color: #1a1a1a;
+  border-radius: 6px;
+  font: 700 16px var(--mono);
+  box-shadow: 0 3px 0 #a99a5e;
+}
+.actions span { color: var(--muted); font-size: 14px; }
+
+.cards { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.playing {
+  display: inline-block;
+  min-width: 48px;
+  padding: 10px 8px;
+  text-align: center;
+  background: var(--card);
+  color: #111;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 20px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+.playing.red { color: var(--red); }
+.sep { color: var(--muted); padding: 0 8px; }
+
+.games { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.games li {
+  display: flex; justify-content: space-between; gap: 16px;
+  border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; color: var(--muted);
+}
+.games li.live { border-color: var(--gold); color: var(--text); }
+.games li.live span { color: var(--gold); }
+
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+th { color: var(--muted); font-weight: 400; }
+td.empty { color: var(--muted); text-align: center; padding: 24px; }
+tbody tr:first-child td:nth-child(2) { color: var(--gold); font-weight: 700; }
+
+footer { color: var(--muted); font-size: 13px; padding: 48px 16px; text-align: center; }
+
+.online { color: var(--muted); font-size: 13px; }
+.online b { color: var(--text); }
+.online .dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  background: #3ddc84; box-shadow: 0 0 8px #3ddc84; vertical-align: middle;
+}
