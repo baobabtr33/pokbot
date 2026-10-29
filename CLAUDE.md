@@ -113,7 +113,15 @@ pokbot validate FILE [--hands N] [--time-ms N] [--strict] [--json]
 pokbot init NAME [--lang py|js]
 pokbot chat | watch                      # lobby chat + who's online + spectate
 pokbot login | logout | whoami | games | schedule | leaderboard
+pokbot update [--force]                  # rerun the server's installer; pokbot --version
 ```
+
+- **Forced updates:** the CLI sends its version (`client` in the `/ws/play` hello, `v=` on
+  `/ws/watch`). The server refuses play from CLIs older than `POKBOT_MIN_CLI` (error tells them
+  to run `pokbot update` or the curl installer; pre-0.2.0 CLIs send nothing and count as old);
+  watchers only get a warning. `GET /api/version` = `{min_cli, latest}`. When a change breaks
+  old clients, bump the version in all four `pyproject.toml`s and both `__init__.py`s, run
+  `uv lock`, and raise the `min_cli` default in `server/config.py`.
 
 - `FILE` = `mybot.py`, `mybot.py:ClassName`, `./executable`, `bot.js`, or a folder with
   `pokbot.toml` (`name`, `entrypoint`, `runtime` = python | node).

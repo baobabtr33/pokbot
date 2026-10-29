@@ -1,6 +1,6 @@
 [project]
 name = "pokbot-cli"
-version = "0.1.0"
+version = "0.2.0"
 description = "pokbot: play and validate poker bots from the terminal."
 requires-python = ">=3.12"
 dependencies = ["pokbot-core", "typer>=0.12", "rich>=13.7", "textual>=0.80", "websockets>=12"]

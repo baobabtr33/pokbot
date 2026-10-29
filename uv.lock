@@ -395,7 +395,7 @@ wheels = [
 
 [[package]]
 name = "pokbot-cli"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "cli" }
 dependencies = [
     { name = "pokbot-core" },
@@ -416,7 +416,7 @@ requires-dist = [
 
 [[package]]
 name = "pokbot-core"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "core" }
 dependencies = [
     { name = "pydantic" },
@@ -427,7 +427,7 @@ requires-dist = [{ name = "pydantic", specifier = ">=2.7" }]
 
 [[package]]
 name = "pokbot-server"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "server" }
 dependencies = [
     { name = "fastapi" },
@@ -444,7 +444,7 @@ requires-dist = [
 
 [[package]]
 name = "pokbot-workspace"
-version = "0.1.0"
+version = "0.2.0"
 source = { virtual = "." }
 dependencies = [
     { name = "pokbot-cli" },

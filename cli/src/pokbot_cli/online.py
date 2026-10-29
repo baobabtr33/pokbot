@@ -13,7 +13,7 @@ import websockets
 from pokbot_core.bundle import pack
 from pokbot_core.players import SubprocessBot
 
-from . import config
+from . import __version__, config
 
 PROTOCOL_TYPES = {"match_start", "hand_start", "action_request", "hand_end", "match_end"}
 
@@ -102,7 +102,7 @@ async def play_live(
     pending: set[asyncio.Task] = set()
 
     async with websockets.connect(url, max_size=2**22) as ws:
-        hello = {"type": "hello", "name": name, "kind": kind, "game": game}
+        hello = {"type": "hello", "name": name, "kind": kind, "game": game, "client": __version__}
         if vs:
             hello.update(vs=vs, bot=bot_name)
         await ws.send(json.dumps(hello))
@@ -158,8 +158,7 @@ async def watch(
 ) -> None:
     """Spectate tournaments and chat until the connection closes."""
     url = config.ws_url(server, "/ws/watch")
-    if token:
-        url += "?" + urllib.parse.urlencode({"token": token})
+    url += "?" + urllib.parse.urlencode({"v": __version__, **({"token": token} if token else {})})
     async with websockets.connect(url, max_size=2**22) as ws:
         if on_ready:
             on_ready(_chat_sender(ws))

@@ -22,6 +22,7 @@ pokbot play mybot --upload   # or let the server enter it in every tournament (s
 pokbot play mybot --vs alice # your bot vs alice's bot, heads-up, right now
 pokbot play                  # play by hand against [BOT]s
 pokbot play --vs alice       # play by hand against alice's bot
+pokbot update                # get the latest CLI (old versions are refused)
 ```
 
 ## A complete bot

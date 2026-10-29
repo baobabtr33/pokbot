@@ -46,6 +46,24 @@ def every(seconds: int) -> str:
 SITE_PAGES = ("/", "/bots.md", "/llms.txt")
 
 
+def _version(text: str | None) -> tuple[int, ...]:
+    try:
+        return tuple(int(part) for part in (text or "").split("."))
+    except ValueError:
+        return ()
+
+
+def outdated_cli(client: str | None) -> str | None:
+    """The message for a CLI older than POKBOT_MIN_CLI (clients before 0.2.0 send no version)."""
+    if _version(client) >= _version(settings.min_cli):
+        return None
+    base = (settings.public_url or "").rstrip("/") or "<server>"
+    return (
+        f"your pokbot ({client or 'before 0.2.0'}) is too old; this server needs {settings.min_cli} or newer. "
+        f"Update with `pokbot update` or: curl -fsSL {base}/install.sh | sh"
+    )
+
+
 def sitemap_xml(site: str) -> str:
     urls = "".join(f"<url><loc>{site}{p}</loc></url>" for p in SITE_PAGES)
     return (
@@ -109,6 +127,11 @@ def create_app(start_scheduler: bool = True) -> FastAPI:
         except StoreError as e:
             raise HTTPException(409, str(e)) from None
         return {"status": "ok", "name": store.user_for(token), "token": token}
+
+    @app.get("/api/version")
+    def version() -> dict:
+        latest = settings.web_dir / "dist" / "VERSION"
+        return {"min_cli": settings.min_cli, "latest": latest.read_text().strip() if latest.is_file() else None}
 
     @app.get("/api/whoami")
     def whoami(authorization: str | None = Header(None)) -> dict:
@@ -270,6 +293,8 @@ def create_app(start_scheduler: bool = True) -> FastAPI:
             if hello.get("type") != "hello":
                 raise ValueError("first message must be hello")
             get_variant(hello.get("game", "holdem"))
+            if old := outdated_cli(hello.get("client")):
+                raise ValueError(old)
             if not user:
                 raise ValueError("sign in with GitHub first: run `pokbot login`")
             kind = "human" if hello.get("kind") == "human" else "bot"
@@ -316,7 +341,7 @@ def create_app(start_scheduler: bool = True) -> FastAPI:
         await serve(conn, opened, lambda: hub.leave(conn))
 
     @app.websocket("/ws/watch")
-    async def ws_watch(ws: WebSocket, token: str | None = None) -> None:
+    async def ws_watch(ws: WebSocket, token: str | None = None, v: str | None = None) -> None:
         """Spectate the running tournament and chat (chatting needs a signed-in token)."""
         await ws.accept()
         user = store.user_for(token)
@@ -324,6 +349,8 @@ def create_app(start_scheduler: bool = True) -> FastAPI:
 
         def opened() -> None:
             hub.spectators.add(conn)
+            if old := outdated_cli(v):
+                conn.push_event({"type": "info", "message": f"[bold red]{old}[/]"})
             conn.push_event(hub.lobby_message())
 
         await serve(conn, opened, lambda: hub.spectators.discard(conn))

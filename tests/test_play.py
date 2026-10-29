@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from pokbot_cli import __version__ as CLI
 from pokbot_cli.validate import validate
 from pokbot_core.engine import HoldemHand
 from pokbot_core.match import Match, MatchConfig
@@ -115,10 +116,10 @@ def test_server_register_upload_schedule(tmp_path, monkeypatch):
 
         # Live play needs a signed-in account, and the seat name is the account name.
         with client.websocket_connect("/ws/play") as ws:
-            ws.send_json({"type": "hello", "name": "mallory", "kind": "bot"})
+            ws.send_json({"type": "hello", "client": CLI, "name": "mallory", "kind": "bot"})
             assert "sign in" in ws.receive_json()["message"]
         with client.websocket_connect(f"/ws/play?token={token}") as ws:
-            ws.send_json({"type": "hello", "name": "mallory", "kind": "bot"})
+            ws.send_json({"type": "hello", "client": CLI, "name": "mallory", "kind": "bot"})
             info = ws.receive_json()
             while info["type"] != "info":
                 info = ws.receive_json()
@@ -354,16 +355,16 @@ def test_tournaments_are_bot_only_and_versus_games_run_now(tmp_path, monkeypatch
 
         # Humans can't take a tournament seat.
         with client.websocket_connect(f"/ws/play?token={tokens['alice']}") as ws:
-            ws.send_json({"type": "hello", "kind": "human"})
+            ws.send_json({"type": "hello", "client": CLI, "kind": "human"})
             assert "bot-only" in ws.receive_json()["message"]
         # Unknown opponent fails fast.
         with client.websocket_connect(f"/ws/play?token={tokens['alice']}") as ws:
-            ws.send_json({"type": "hello", "kind": "human", "vs": "nobody"})
+            ws.send_json({"type": "hello", "client": CLI, "kind": "human", "vs": "nobody"})
             assert "no uploaded bot" in ws.receive_json()["message"]
 
         # Bot vs bot: both uploaded bots play on the server; the opponent's cards stay hidden.
         with client.websocket_connect(f"/ws/play?token={tokens['alice']}") as ws:
-            ws.send_json({"type": "hello", "kind": "bot", "vs": "bob", "bot": "alice-pairs"})
+            ws.send_json({"type": "hello", "client": CLI, "kind": "bot", "vs": "bob", "bot": "alice-pairs"})
             start = until(ws, "versus_start")
             assert start["players"] == ["alice-pairs", "bob-caller"]
             hidden = until(ws, "table")
@@ -377,7 +378,7 @@ def test_tournaments_are_bot_only_and_versus_games_run_now(tmp_path, monkeypatch
 
         # Someone else's bot can't be borrowed as "yours".
         with client.websocket_connect(f"/ws/play?token={tokens['alice']}") as ws:
-            ws.send_json({"type": "hello", "kind": "bot", "vs": "bob", "bot": "bob-caller"})
+            ws.send_json({"type": "hello", "client": CLI, "kind": "bot", "vs": "bob", "bot": "bob-caller"})
             msg = ws.receive_json()
             while msg["type"] != "error":
                 msg = ws.receive_json()
@@ -385,7 +386,7 @@ def test_tournaments_are_bot_only_and_versus_games_run_now(tmp_path, monkeypatch
 
         # Human vs bot: answer every action_request by hand.
         with client.websocket_connect(f"/ws/play?token={tokens['bob']}") as ws:
-            ws.send_json({"type": "hello", "kind": "human", "vs": "alice"})
+            ws.send_json({"type": "hello", "client": CLI, "kind": "human", "vs": "alice"})
             while True:
                 msg = ws.receive_json()
                 if msg["type"] == "action_request":
@@ -394,3 +395,27 @@ def test_tournaments_are_bot_only_and_versus_games_run_now(tmp_path, monkeypatch
                     assert msg["event"]["result"]["hands"] == 3
                     break
         assert client.get("/api/leaderboard").json()["players"] == []  # games never score
+
+
+def test_old_cli_is_told_to_update(tmp_path, monkeypatch):
+    import pokbot_server.app as server_app
+    from pokbot_server.config import Settings
+
+    cfg = Settings(data_dir=tmp_path, dev_login=True, min_cli="0.2.0", public_url="https://pokbot.example")
+    for mod in ("app", "hub", "games"):
+        monkeypatch.setattr(f"pokbot_server.{mod}.settings", cfg)
+    with TestClient(server_app.create_app(start_scheduler=False)) as client:
+        token = client.post("/api/register", json={"name": "alice"}).json()["token"]
+        for client_version in (None, "0.1.9"):
+            with client.websocket_connect(f"/ws/play?token={token}") as ws:
+                hello = {"type": "hello", "kind": "bot"}
+                if client_version:
+                    hello["client"] = client_version
+                ws.send_json(hello)
+                msg = ws.receive_json()
+                assert msg["type"] == "error" and "pokbot update" in msg["message"]
+                assert "curl -fsSL https://pokbot.example/install.sh | sh" in msg["message"]
+        with client.websocket_connect("/ws/watch") as ws:  # watching still works, with a warning
+            seen = [ws.receive_json() for _ in range(3)]
+            assert any(m["type"] == "info" and "too old" in m["message"] for m in seen)
+        assert client.get("/api/version").json()["min_cli"] == "0.2.0"

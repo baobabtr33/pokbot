@@ -9,7 +9,9 @@ from __future__ import annotations
 import asyncio
 import getpass
 import json
+import subprocess
 import sys
+import urllib.request
 from pathlib import Path
 from typing import Annotated
 
@@ -20,7 +22,7 @@ from pokbot_core.players import SubprocessBot
 from pokbot_core.tournament import Tournament, TournamentConfig
 from rich.console import Console
 
-from . import config, online
+from . import __version__, config, online
 from .plain import PlainPrinter
 from .validate import Report
 from .validate import validate as run_validate
@@ -34,6 +36,19 @@ app = typer.Typer(
     help="[bold]pokbot[/] · write poker bots, enter them in tournaments every 30 minutes.",
 )
 console = Console(highlight=False)
+
+
+def _show_version(value: bool) -> None:
+    if value:
+        print(f"pokbot {__version__}")
+        raise typer.Exit()
+
+
+@app.callback()
+def _main(
+    version: Annotated[bool, typer.Option("--version", "-V", callback=_show_version, is_eager=True, help="Show the version.")] = False,
+) -> None:
+    pass
 err = Console(stderr=True, highlight=False)
 
 GameOpt = Annotated[str, typer.Option("--game", "-g", help="holdem | omaha | stud | draw")]
@@ -370,6 +385,29 @@ def logout() -> None:
     data.pop("name", None)
     config.save(data)
     console.print("[green]✓[/] signed out")
+
+
+@app.command()
+def update(
+    force: Annotated[bool, typer.Option("--force", help="Reinstall even if already up to date.")] = False,
+    server: ServerOpt = None,
+) -> None:
+    """Update pokbot to the version the server ships (reruns its installer)."""
+    url = config.server_url(server)
+    try:
+        with urllib.request.urlopen(f"{url}/api/version", timeout=10) as r:
+            info = json.load(r)
+    except (OSError, ValueError) as e:
+        err.print(f"[red]server error:[/] {e}")
+        raise typer.Exit(EXIT_SERVER) from None
+    latest = info.get("latest")
+    if latest == __version__ and not force:
+        console.print(f"[green]✓[/] pokbot {__version__} is up to date")
+        return
+    console.print(f"updating pokbot {__version__} → {latest or 'latest'} from {url}")
+    # Same path as a fresh install: the server's install.sh verifies checksums and replaces the tool.
+    code = subprocess.call(["sh", "-c", f'curl -fsSL "{url}/install.sh" | sh'])
+    raise typer.Exit(EXIT_OK if code == 0 else EXIT_SERVER)
 
 
 @app.command()
