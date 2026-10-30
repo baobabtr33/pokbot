@@ -12,6 +12,7 @@ import json
 import subprocess
 import sys
 import urllib.request
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -22,7 +23,7 @@ from pokbot_core.players import SubprocessBot
 from pokbot_core.tournament import Tournament, TournamentConfig
 from rich.console import Console
 
-from . import __version__, config, online
+from . import __version__, anim, config, online
 from .plain import PlainPrinter
 from .validate import Report
 from .validate import validate as run_validate
@@ -31,7 +32,6 @@ EXIT_OK, EXIT_INVALID, EXIT_USAGE, EXIT_SERVER = 0, 1, 2, 3
 
 app = typer.Typer(
     add_completion=False,
-    no_args_is_help=True,
     rich_markup_mode="rich",
     help="[bold]pokbot BOT Arena[/] · submit your poker bot to compete: `pokbot submit mybot`. Tournaments every 30 minutes.",
 )
@@ -44,11 +44,16 @@ def _show_version(value: bool) -> None:
         raise typer.Exit()
 
 
-@app.callback()
+@app.callback(invoke_without_command=True)
 def _main(
+    ctx: typer.Context,
     version: Annotated[bool, typer.Option("--version", "-V", callback=_show_version, is_eager=True, help="Show the version.")] = False,
 ) -> None:
-    pass
+    if ctx.invoked_subcommand is None:  # bare `pokbot`: the splash, then help
+        if anim.enabled():
+            anim.play(anim.splash())
+        console.print(ctx.get_help())
+        raise typer.Exit()
 err = Console(stderr=True, highlight=False)
 
 GameOpt = Annotated[str, typer.Option("--game", "-g", help="holdem | omaha | stud | draw")]
@@ -96,7 +101,28 @@ def submit(
     _check_game(game)
     if not skip_validate:
         _validate_or_exit(file, hands=200, game=game, quiet_json=False)
-    _do_upload(file, name or Path(file.split(":")[0]).stem, server)
+    _do_upload(file, name or Path(file.split(":")[0]).stem, server, celebrate=True)
+
+
+@app.command()
+def demo(
+    loop: Annotated[bool, typer.Option("--loop", help="Keep replaying until Ctrl-C.")] = False,
+) -> None:
+    """Watch the BOT Arena intro and a showdown hand (the same animation as the website)."""
+    if not anim.enabled():
+        err.print(f"[yellow]demo needs an interactive terminal at least {anim.W + 1} columns wide[/]")
+        raise typer.Exit(EXIT_USAGE)
+    seed = 7
+    try:
+        while True:
+            anim.play(anim.splash(seed))
+            anim.play(anim.showdown(seed))
+            if not loop:
+                break
+            seed += 1
+            console.print()
+    except KeyboardInterrupt:
+        pass
 
 
 @app.command()
@@ -251,7 +277,15 @@ def _play_online(target, hero, game, plain, as_json, server, vs=None, bot_name=N
         return EXIT_SERVER
 
 
-def _do_upload(target: str, name: str | None, server: str | None) -> str:
+def _local_time(iso: str) -> str:
+    """`2026-10-30T06:30:00+00:00` -> `at 23:30` in this machine's time zone."""
+    try:
+        return "at " + datetime.fromisoformat(iso).astimezone().strftime("%H:%M")
+    except ValueError:
+        return iso
+
+
+def _do_upload(target: str, name: str | None, server: str | None, celebrate: bool = False) -> str:
     url = config.server_url(server)
     token = config.token()
     login_name = config.load().get("name")
@@ -266,6 +300,8 @@ def _do_upload(target: str, name: str | None, server: str | None) -> str:
     except (online.ServerError, ValueError) as e:
         err.print(f"[red]upload failed:[/] {e}")
         raise typer.Exit(EXIT_SERVER) from None
+    if celebrate and anim.enabled():
+        anim.play(anim.entered(info["name"], _local_time(info["next_tournament"])))
     console.print(f"[green]uploaded[/] [bold]{info['name']}[/] · entered in every tournament")
     console.print(f"next tournament starts at [bold]{info['next_tournament']}[/]")
     if info.get("page"):

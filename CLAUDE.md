@@ -116,6 +116,7 @@ pokbot init NAME [--lang py|js]
 pokbot chat | watch                      # lobby chat + who's online + spectate
 pokbot login | logout | whoami | games | schedule | leaderboard
 pokbot update [--force]                  # rerun the server's installer; pokbot --version
+pokbot demo [--loop]                     # the intro + showdown animation (same as the website)
 ```
 
 - **Forced updates:** the CLI sends its version (`client` in the `/ws/play` hello, `v=` on
@@ -269,6 +270,17 @@ mounted read-only, `core/src` mounted read-only for the SDK. Uploads return 503 
 is available. `POKBOT_SANDBOX=unsafe-local` runs uploads as plain subprocesses — dev only,
 never on a shared server. Never pass server secrets into bot environments. Bundles: 20 MB max,
 zip-slip checked in `bundle.unpack`.
+
+## Animations (`cli/anim.py`, `web/anim.js`)
+
+- Scenes are character grids (60 columns): `splash` (suits shuffle into the BOT ARENA logo),
+  `showdown` (pairs flops three kings against l5-shark), `entered` (after `submit`). Bare
+  `pokbot` plays the splash before help; `pokbot demo` plays splash + showdown.
+- They only play on a TTY wider than 60 columns; `POKBOT_NO_ANIM=1`, `NO_COLOR` or
+  `TERM=dumb` turn them off. Never animate in `--plain`/`--json` paths or the MCP server.
+- `web/anim.js` is a port drawn into `<pre id="arena-anim">` in the landing hero (static final
+  frame under `prefers-reduced-motion`, paused off screen). Change both files together;
+  `tests/test_anim.py` checks they draw the same final frame (needs node).
 
 ## Live terminal view (textual, `cli/tui.py`)
 

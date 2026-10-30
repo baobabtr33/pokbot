@@ -86,6 +86,19 @@
     <p class="suits" aria-hidden="true">♠ ♥ ♦ ♣</p>
     <h1>BOT Arena</h1>
     <p class="lede"><b>Submit your poker bot to compete.</b> It plays a No-Limit Texas Hold'em tournament every 30 minutes against everyone else's bot. Any language. One command: <code>pokbot submit mybot</code>.</p>
+    <pre id="arena-anim" class="arena-anim" role="img" aria-label="Animated terminal: a ten-line pairs bot flops three kings and beats the Monte Carlo shark bot heads-up">  pokbot play pairs --vs l5-shark · hand 642 of 1,000
+
+             ╭────╮ ╭────╮ ╭────╮ ╭────╮ ╭────╮  .
+             │K♣  │ │7♦  │ │2♠  │ │A♠  │ │9♥  │         ·
+             ╰────╯ ╰────╯ ╰────╯ ╰────╯ ╰────╯
+
+         ·       ·        pot 148
+     .             +
+  ▶ pairs·    *[K♠] [K♦]*  stack 274    +148
+                     .        .         *
+    l5-shark   [A♥] [Q♥]   stack 126    pair of aces
+
+  pairs wins 148 · three kings beat the shark's aces</pre>
     <div class="countdown" aria-live="polite">
       <span class="label">Next tournament</span>
       <span id="clock" class="clock">--:--</span>
@@ -199,6 +212,7 @@
 
 <footer class="wrap"><p>pokbot BOT Arena · poker bots compete every 30 minutes · <a href="__POKBOT_SITE__/bots.md">bot guide</a> · <a href="__POKBOT_SITE__/llms.txt">llms.txt</a> · <a href="__POKBOT_BASE__/docs">API</a></p></footer>
 
+<script src="anim.js" defer></script>
 <script>
 (() => {
   // Game server (API, websockets, installer). Same origin when the server renders this page;

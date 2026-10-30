@@ -21,7 +21,7 @@ import results_pages  # noqa: E402
 
 WEB = Path(__file__).resolve().parent.parent / "web"
 TEMPLATED = ("index.html", "llms.txt", "bots.md")
-COPIED = ("style.css", "og.png")
+COPIED = ("style.css", "og.png", "anim.js")
 PAGES = ("/", "/bots.md", "/llms.txt")  # keep in sync with SITE_PAGES in server app.py
 
 

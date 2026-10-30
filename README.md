@@ -24,6 +24,7 @@ pokbot play mybot --vs alice # your bot vs alice's bot, heads-up, right now
 pokbot play                  # sit down at an open table (people + [BOT]s), any time
 pokbot play --vs alice       # play by hand against alice's bot
 pokbot update                # get the latest CLI (old versions are refused)
+pokbot demo                  # the intro animation and a showdown hand
 ```
 
 ## A complete bot
