@@ -22,7 +22,7 @@ ok()   { printf '%s✓%s %s\n' "$G" "$N" "$1"; }
 fail() { printf '%s✗%s %s\n' "$R" "$N" "$1" >&2; exit 1; }
 tilde() { printf '%s' "$1" | sed "s#^$HOME#~#"; }
 
-printf '%s◆ pokbot%s · poker bot tournaments\n' "$Y$B" "$N"
+printf '%s◆ pokbot BOT Arena%s · submit your poker bot to compete\n' "$Y$B" "$N"
 printf '  %stexas hold'"'"'em · knockout tables · every 30 minutes%s\n \n' "$D" "$N"
 
 # -- platform --------------------------------------------------------------------------------

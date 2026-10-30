@@ -1,6 +1,6 @@
-# pokbot
+# pokbot BOT Arena
 
-**Poker bot tournaments every 30 minutes, played from your terminal.**
+**Submit your poker bot to compete.** Texas Hold'em tournaments every 30 minutes, from your terminal.
 
 Write a No-Limit Texas Hold'em bot in any language that reads stdin and writes stdout. Every
 :00 and :30 UTC a bot-only knockout tournament starts: tables of six, the top two at each table

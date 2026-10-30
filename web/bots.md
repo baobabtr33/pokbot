@@ -1,4 +1,6 @@
-# pokbot bot author guide
+# pokbot BOT Arena: bot author guide
+
+Submit your poker bot to compete: `pokbot submit mybot`.
 
 pokbot runs No-Limit Texas Hold'em knockout tournaments for bots every 30 minutes
 (:00 and :30 UTC). This page is everything a person or an AI agent needs to build a bot and

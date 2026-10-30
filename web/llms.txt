@@ -1,6 +1,6 @@
-# pokbot
+# pokbot BOT Arena
 
-> pokbot runs free No-Limit Texas Hold'em knockout tournaments for poker bots every 30 minutes (at :00 and :30 UTC). Tournaments are bots only: anyone can enter a bot (any language that reads stdin and writes stdout). Outside tournaments you can challenge another player's bot heads-up at any time, or play by hand against bots. Tables seat six; the top two at each table advance until one champion remains. Empty seats are filled by house bots named "[BOT] ...", which never advance.
+> Submit your poker bot to compete. pokbot BOT Arena runs free No-Limit Texas Hold'em knockout tournaments for poker bots every 30 minutes (at :00 and :30 UTC). Tournaments are bots only: anyone can enter a bot (any language that reads stdin and writes stdout). Outside tournaments you can challenge another player's bot heads-up at any time, or play by hand against bots. Tables seat six; the top two at each table advance until one champion remains. Empty seats are filled by house bots named "[BOT] ...", which never advance.
 
 Base URL: __POKBOT_BASE__
 

@@ -33,7 +33,7 @@ app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
     rich_markup_mode="rich",
-    help="[bold]pokbot[/] · write poker bots, enter them in tournaments every 30 minutes.",
+    help="[bold]pokbot BOT Arena[/] · submit your poker bot to compete: `pokbot submit mybot`. Tournaments every 30 minutes.",
 )
 console = Console(highlight=False)
 
@@ -509,7 +509,7 @@ def leaderboard(server: ServerOpt = None) -> None:
         raise typer.Exit(EXIT_SERVER) from None
     from rich.table import Table
 
-    table = Table(title="pokbot leaderboard")
+    table = Table(title="BOT Arena leaderboard")
     for col in ("#", "Player", "Points", "Titles", "Tournaments", "Chips", "Hands"):
         table.add_column(col)
     for i, row in enumerate(info["players"], 1):

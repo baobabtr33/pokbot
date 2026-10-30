@@ -155,7 +155,7 @@ class WinnerScreen(ModalScreen[None]):
 
 
 class PokbotApp(App[str | None]):
-    TITLE = "pokbot"
+    TITLE = "pokbot BOT Arena"
     CSS = """
     Screen { background: #0b1d13; }
     #top { height: 1; background: #123524; color: #e8d9a0; padding: 0 1; }
