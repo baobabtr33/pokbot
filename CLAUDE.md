@@ -116,7 +116,7 @@ pokbot init NAME [--lang py|js]
 pokbot chat | watch                      # lobby chat + who's online + spectate
 pokbot login | logout | whoami | games | schedule | leaderboard
 pokbot update [--force]                  # rerun the server's installer; pokbot --version
-pokbot demo [--loop]                     # the intro + showdown animation (same as the website)
+pokbot demo [--loop]                     # intro, arena and showdown animation (same as the website)
 ```
 
 - **Forced updates:** the CLI sends its version (`client` in the `/ws/play` hello, `v=` on
@@ -274,8 +274,12 @@ zip-slip checked in `bundle.unpack`.
 ## Animations (`cli/anim.py`, `web/anim.js`)
 
 - Scenes are character grids (60 columns): `splash` (suits shuffle into the BOT ARENA logo),
+  `arena` (six tables race through 10 sets while the set leader changes and settles),
   `showdown` (pairs flops three kings against l5-shark), `entered` (after `submit`). Bare
-  `pokbot` plays the splash before help; `pokbot demo` plays splash + showdown.
+  `pokbot` plays the splash before help; `pokbot demo` plays splash + arena + showdown.
+- `arena` shows live numbers only: bots entered and hands they played, from
+  `/api/leaderboard` (the CLI waits 2 s at most; the site reads `data-api` on the `<pre>`).
+  Offline it shows the per-table rules instead. Never hard-code or inflate player counts.
 - They only play on a TTY wider than 60 columns; `POKBOT_NO_ANIM=1`, `NO_COLOR` or
   `TERM=dumb` turn them off. Never animate in `--plain`/`--json` paths or the MCP server.
 - `web/anim.js` is a port drawn into `<pre id="arena-anim">` in the landing hero (static final

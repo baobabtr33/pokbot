@@ -117,6 +117,87 @@ def splash(seed: int = 7) -> Iterator[Grid]:
         yield g
 
 
+# --- arena --------------------------------------------------------------------------------
+
+# A scripted set-by-set race: the shark leads early, then the pairs bot pulls away.
+SET_WINNERS = [
+    "l5-shark",
+    "tag",
+    "l5-shark",
+    "pairs",
+    "pairs",
+    "l5-shark",
+    "pairs",
+    "pairs",
+    "tag",
+    "pairs",
+]
+RACERS = ["pairs", "l5-shark", "tag"]
+DECK = [r + s for r in "AKQJT98765432" for s in SUITS]
+
+
+def arena(bots: int | None = None, hands: int | None = None, seed: int = 7) -> Iterator[Grid]:
+    """Six tables race through 10 sets of 1,000 hands while the set leader changes and settles.
+
+    `bots` and `hands` are the live numbers from the server's leaderboard (bots entered, hands
+    they have played); without them the scene shows only the per-table rules.
+    """
+    rng = random.Random(seed)
+    speeds = [104 + 7 * i for i in range(6)]  # hands per frame; every table finishes by frame ~97
+    total = 132
+    header = "6 tables · 10 sets × 1,000 hands each"
+    if bots:
+        header = f"{bots:,} bots entered · " + header
+    for f in range(total):
+        g = Grid(13)
+        g.center(0, header, "muted")
+        for i, speed in enumerate(speeds):
+            x, y = 1 + (i % 3) * 20, 1 + (i // 3) * 3
+            played = min(10_000, f * speed)
+            done = played == 10_000
+            border = "win" if done else "back"
+            g.put(x, y, "╭" + f" table {i + 1} ".ljust(16, "─") + "╮", border)
+            g.put(x, y + 1, "│", border)
+            if done:
+                g.put(x + 2, y + 1, "✓ done", "win")
+            else:
+                for k in range(2):
+                    card = rng.choice(DECK)
+                    g.put(x + 2 + k * 3, y + 1, card, suit_style(card))
+            g.put(x + 10, y + 1, f"{played:>6,}", "ink" if not done else "muted")
+            g.put(x + 17, y + 1, "│", border)
+            sets = played // 1000
+            g.put(x, y + 2, "╰", border)
+            for s in range(10):
+                g.put(x + 1 + s, y + 2, "▰" if s < sets else "▱", "gold" if s < sets else "dim")
+            g.put(x + 11, y + 2, "──────╯", border)
+        t = min(1.0, f / 100)
+        ease = 1 - (1 - t) ** 3
+        if hands:
+            g.center(
+                8,
+                f"{round(hands * ease):,} hands played",
+                "shine" if t == 1 and f % 8 < 4 else "gold",
+            )
+        else:
+            g.center(8, f"{round(10_000 * ease):,} hands at every table", "gold")
+        decided = min(10, f // 10)
+        wins = {name: SET_WINNERS[:decided].count(name) for name in RACERS}
+        order = sorted(RACERS, key=lambda n: (-wins[n], RACERS.index(n)))
+        for row, name in enumerate(order):
+            lead = row == 0 and wins[name] > 0
+            g.put(4, 9 + row, ("▶ " if lead else "  ") + f"{name:<9}", "gold" if lead else "ink")
+            g.put(16, 9 + row, "█" * (wins[name] * 3), "gold" if lead else "back")
+            g.put(48, 9 + row, f"{wins[name]} set" + ("" if wins[name] == 1 else "s"), "muted")
+        if decided < 4:
+            g.put(2, 12, "early sets are luck: anyone can lead", "muted")
+        elif decided < 10:
+            g.put(2, 12, f"set {decided} of 10 · the luck is washing out", "ink")
+        else:
+            g.put(2, 12, "10,000 hands later, the real OG is on top", "gold")
+        yield g
+
+
 # --- showdown -----------------------------------------------------------------------------
 
 
@@ -230,7 +311,9 @@ class Table:
             self.stack[name] -= amount
             self.pot += amount
             for k in range(min(3, 1 + amount // 20)):
-                self.chips.append([44.0 + k * 2, float(self.SEATS[name]), W / 2 - 1 + k, 6.0, -0.2 * k])
+                self.chips.append(
+                    [44.0 + k * 2, float(self.SEATS[name]), W / 2 - 1 + k, 6.0, -0.2 * k]
+                )
         yield from self.hold(9)
 
     def deal(self, *idx: int) -> Iterator[Grid]:

@@ -13,7 +13,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_scenes_keep_their_shape():
-    for frames, height in ((anim.splash(), 9), (anim.showdown(), 13), (anim.entered("alice-tag", "at 12:30"), 6)):
+    for frames, height in (
+        (anim.splash(), 9),
+        (anim.showdown(), 13),
+        (anim.arena(10, 1_840_000), 13),
+        (anim.arena(), 13),
+        (anim.entered("alice-tag", "at 12:30"), 6),
+    ):
         grids = list(frames)
         assert len(grids) > 20
         assert all(g.h == height and all(len(row) == anim.W for row in g.cells) for g in grids)
@@ -23,6 +29,15 @@ def test_showdown_ends_with_the_pairs_bot_winning():
     final = list(anim.showdown())[-1].text()
     assert "pairs wins 148" in final
     assert "stack 274" in final and "stack 126" in final  # 200 - 74 + 148, 200 - 74
+
+
+def test_arena_ends_with_live_numbers_and_the_leader():
+    final = list(anim.arena(10, 1_840_000))[-1].text()
+    assert "10 bots entered" in final and "1,840,000 hands played" in final
+    assert "▶ pairs" in final and "5 sets" in final and "real OG" in final
+    assert final.count("✓ done") == 6
+    offline = list(anim.arena())[-1].text()
+    assert "bots entered" not in offline and "10,000 hands at every table" in offline
 
 
 def test_entered_names_the_bot():
@@ -53,7 +68,12 @@ def test_web_port_draws_the_same_final_frame(tmp_path):
         "eval(fs.readFileSync(process.argv[2], 'utf8'));\n"
         'process.stdout.write(el.innerHTML.replace(/<[^>]+>/g, ""));\n'
     )
-    js = subprocess.run(["node", str(harness), str(ROOT / "web/anim.js")], capture_output=True, text=True, check=True).stdout
+    js = subprocess.run(
+        ["node", str(harness), str(ROOT / "web/anim.js")],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
     py = list(anim.showdown())[-1].text()
 
     def table(text: str) -> list[str]:  # sparks are random; compare everything else

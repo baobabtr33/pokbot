@@ -1,7 +1,7 @@
 """`pokbot` command line.
 
-    pokbot play [FILE ...]        enter the next tournament (no FILE = play yourself)
-    pokbot validate FILE          check a bot offline
+pokbot play [FILE ...]        enter the next tournament (no FILE = play yourself)
+pokbot validate FILE          check a bot offline
 """
 
 from __future__ import annotations
@@ -47,13 +47,20 @@ def _show_version(value: bool) -> None:
 @app.callback(invoke_without_command=True)
 def _main(
     ctx: typer.Context,
-    version: Annotated[bool, typer.Option("--version", "-V", callback=_show_version, is_eager=True, help="Show the version.")] = False,
+    version: Annotated[
+        bool,
+        typer.Option(
+            "--version", "-V", callback=_show_version, is_eager=True, help="Show the version."
+        ),
+    ] = False,
 ) -> None:
     if ctx.invoked_subcommand is None:  # bare `pokbot`: the splash, then help
         if anim.enabled():
             anim.play(anim.splash())
         console.print(ctx.get_help())
         raise typer.Exit()
+
+
 err = Console(stderr=True, highlight=False)
 
 GameOpt = Annotated[str, typer.Option("--game", "-g", help="holdem | omaha | stud | draw")]
@@ -90,10 +97,22 @@ def _validate_or_exit(target: str, hands: int, game: str, quiet_json: bool = Fal
 
 @app.command()
 def submit(
-    file: Annotated[str, typer.Argument(help="Your bot: mybot.py, mybot.py:MyBot, ./mybot, bot.js or a folder with pokbot.toml.")],
-    name: Annotated[str | None, typer.Option("--name", "-n", help="Bot name after your login (default: the file name): alice-<name>.")] = None,
+    file: Annotated[
+        str,
+        typer.Argument(
+            help="Your bot: mybot.py, mybot.py:MyBot, ./mybot, bot.js or a folder with pokbot.toml."
+        ),
+    ],
+    name: Annotated[
+        str | None,
+        typer.Option(
+            "--name", "-n", help="Bot name after your login (default: the file name): alice-<name>."
+        ),
+    ] = None,
     game: GameOpt = "holdem",
-    skip_validate: Annotated[bool, typer.Option("--skip-validate", help="Don't validate first.")] = False,
+    skip_validate: Annotated[
+        bool, typer.Option("--skip-validate", help="Don't validate first.")
+    ] = False,
     server: ServerOpt = None,
 ) -> None:
     """Submit a bot: it is validated, uploaded, and entered in every tournament (:00 and :30).
@@ -104,18 +123,32 @@ def submit(
     _do_upload(file, name or Path(file.split(":")[0]).stem, server, celebrate=True)
 
 
+def _arena_stats() -> tuple[int | None, int | None]:
+    """Bots entered and hands they have played, from the live leaderboard; (None, None) offline."""
+    try:
+        with urllib.request.urlopen(f"{config.server_url()}/api/leaderboard", timeout=2) as r:
+            players = json.load(r)["players"]
+    except (OSError, ValueError, KeyError):
+        return None, None
+    return len(players), sum(p.get("hands", 0) for p in players)
+
+
 @app.command()
 def demo(
     loop: Annotated[bool, typer.Option("--loop", help="Keep replaying until Ctrl-C.")] = False,
 ) -> None:
-    """Watch the BOT Arena intro and a showdown hand (the same animation as the website)."""
+    """Watch the BOT Arena intro, the tables at work, and a showdown hand (as on the website)."""
     if not anim.enabled():
-        err.print(f"[yellow]demo needs an interactive terminal at least {anim.W + 1} columns wide[/]")
+        err.print(
+            f"[yellow]demo needs an interactive terminal at least {anim.W + 1} columns wide[/]"
+        )
         raise typer.Exit(EXIT_USAGE)
+    bots, hands = _arena_stats()
     seed = 7
     try:
         while True:
             anim.play(anim.splash(seed))
+            anim.play(anim.arena(bots, hands, seed))
             anim.play(anim.showdown(seed))
             if not loop:
                 break
@@ -127,18 +160,52 @@ def demo(
 
 @app.command()
 def play(
-    files: Annotated[list[str] | None, typer.Argument(help="Bot file(s): mybot.py, mybot.py:MyBot, ./mybot, bot.js or a folder with pokbot.toml. Omit to play by hand.")] = None,
-    vs: Annotated[str | None, typer.Option("--vs", help="Heads-up now against this GitHub user's uploaded bot (or a bot name like alice-tag). With FILE: your bot plays it on the server; without: you play it by hand.")] = None,
-    local: Annotated[bool, typer.Option("--local", help="Run the tournament on this machine against [BOT]s; no server.")] = False,
-    upload: Annotated[bool, typer.Option("--upload", hidden=True, help="Same as `pokbot submit`.")] = False,
+    files: Annotated[
+        list[str] | None,
+        typer.Argument(
+            help="Bot file(s): mybot.py, mybot.py:MyBot, ./mybot, bot.js or a folder with pokbot.toml. Omit to play by hand."
+        ),
+    ] = None,
+    vs: Annotated[
+        str | None,
+        typer.Option(
+            "--vs",
+            help="Heads-up now against this GitHub user's uploaded bot (or a bot name like alice-tag). With FILE: your bot plays it on the server; without: you play it by hand.",
+        ),
+    ] = None,
+    local: Annotated[
+        bool,
+        typer.Option(
+            "--local", help="Run the tournament on this machine against [BOT]s; no server."
+        ),
+    ] = False,
+    upload: Annotated[
+        bool, typer.Option("--upload", hidden=True, help="Same as `pokbot submit`.")
+    ] = False,
     name: Annotated[str | None, typer.Option("--name", "-n", help="Display name.")] = None,
     game: GameOpt = "holdem",
-    hands: Annotated[int | None, typer.Option("--hands", help="Hands per table (--local only). Default 10,000 for bots, 30 with a human.")] = None,
-    table_size: Annotated[int, typer.Option("--table-size", help="Seats per table (--local only).")] = 6,
-    seed: Annotated[int | None, typer.Option("--seed", help="Deterministic seed (--local only).")] = None,
-    skip_validate: Annotated[bool, typer.Option("--skip-validate", help="Don't validate first.")] = False,
-    plain: Annotated[bool, typer.Option("--plain", help="Line output instead of the live view.")] = False,
-    as_json: Annotated[bool, typer.Option("--json", help="Machine-readable results on stdout.")] = False,
+    hands: Annotated[
+        int | None,
+        typer.Option(
+            "--hands",
+            help="Hands per table (--local only). Default 10,000 for bots, 30 with a human.",
+        ),
+    ] = None,
+    table_size: Annotated[
+        int, typer.Option("--table-size", help="Seats per table (--local only).")
+    ] = 6,
+    seed: Annotated[
+        int | None, typer.Option("--seed", help="Deterministic seed (--local only).")
+    ] = None,
+    skip_validate: Annotated[
+        bool, typer.Option("--skip-validate", help="Don't validate first.")
+    ] = False,
+    plain: Annotated[
+        bool, typer.Option("--plain", help="Line output instead of the live view.")
+    ] = False,
+    as_json: Annotated[
+        bool, typer.Option("--json", help="Machine-readable results on stdout.")
+    ] = False,
     server: ServerOpt = None,
 ) -> None:
     """Play poker. Tournaments are bot-only (enter one with `pokbot submit`).
@@ -164,7 +231,9 @@ def play(
         err.print("[red]--vs takes at most one FILE and no --local/--upload[/]")
         raise typer.Exit(EXIT_USAGE)
     if not local and len(files) > 1:
-        err.print("[red]online play takes one FILE; use --local to run several bots against each other[/]")
+        err.print(
+            "[red]online play takes one FILE; use --local to run several bots against each other[/]"
+        )
         raise typer.Exit(EXIT_USAGE)
 
     if not skip_validate:
@@ -182,13 +251,17 @@ def play(
         bot_name = None
         if files:  # the server plays both bots, so yours has to be uploaded first
             bot_name = _do_upload(files[0], name or Path(files[0].split(":")[0]).stem, server)
-        raise typer.Exit(_play_online(None, hero, game, plain, as_json, server, vs=vs, bot_name=bot_name))
+        raise typer.Exit(
+            _play_online(None, hero, game, plain, as_json, server, vs=vs, bot_name=bot_name)
+        )
     if human and not local:
         # Tournaments are bot-only; by hand you sit at an open table on the server, any time.
         # House bots fill the seats and give them up as more people join.
         if config.token():
             raise typer.Exit(_play_online(None, hero, game, plain, as_json, server))
-        console.print("[dim]not signed in: playing [BOT]s on this machine (pokbot login to play people)[/]")
+        console.print(
+            "[dim]not signed in: playing [BOT]s on this machine (pokbot login to play people)[/]"
+        )
         local = True
     if local:
         code = _play_local(files, hero, human, game, hands, table_size, seed, plain, as_json)
@@ -201,8 +274,11 @@ def _play_local(files, hero, human, game, hands, table_size, seed, plain, as_jso
     bot_hands = hands or 10_000
     human_hands = hands or 30
     tcfg = TournamentConfig(
-        table_size=table_size, bot_hands=bot_hands, human_hands=human_hands,
-        match=MatchConfig(game=game), seed=seed,
+        table_size=table_size,
+        bot_hands=bot_hands,
+        human_hands=human_hands,
+        match=MatchConfig(game=game),
+        seed=seed,
     )
 
     def entrants(app=None):
@@ -213,7 +289,9 @@ def _play_local(files, hero, human, game, hands, table_size, seed, plain, as_jso
             players.append(HumanPlayer(hero, app))
         for i, f in enumerate(files):
             stem = Path(f.split(":")[0]).stem
-            players.append(SubprocessBot.from_file(f, name=hero if i == 0 and len(files) == 1 else stem))
+            players.append(
+                SubprocessBot.from_file(f, name=hero if i == 0 and len(files) == 1 else stem)
+            )
         return players
 
     if _use_tui(plain, as_json):
@@ -257,12 +335,25 @@ def _play_online(target, hero, game, plain, as_json, server, vs=None, bot_name=N
             from .tui import PokbotApp
 
             async def source(app: PokbotApp) -> None:
-                await app.handle({"type": "info", "message": f"connecting to {url} as [bold]{hero}[/]…"})
-                await online.play_live(url, token, hero, app.handle, bot=bot,
-                                       ask=app.ask if human else None, game=game,
-                                       on_ready=app.set_chat_sender, vs=vs, bot_name=bot_name)
+                await app.handle(
+                    {"type": "info", "message": f"connecting to {url} as [bold]{hero}[/]…"}
+                )
+                await online.play_live(
+                    url,
+                    token,
+                    hero,
+                    app.handle,
+                    bot=bot,
+                    ask=app.ask if human else None,
+                    game=game,
+                    on_ready=app.set_chat_sender,
+                    vs=vs,
+                    bot_name=bot_name,
+                )
 
-            app = PokbotApp(source, hero=bot_name or hero, hero_is_human=human, game=game, practice="after")
+            app = PokbotApp(
+                source, hero=bot_name or hero, hero_is_human=human, game=game, practice="after"
+            )
             if app.run() == "practice":
                 _practice(hero, game)
             return EXIT_OK
@@ -270,7 +361,11 @@ def _play_online(target, hero, game, plain, as_json, server, vs=None, bot_name=N
             err.print("[red]playing yourself needs an interactive terminal[/]")
             return EXIT_USAGE
         printer = PlainPrinter(hero=bot_name or hero, as_json=as_json)
-        asyncio.run(online.play_live(url, token, hero, printer.handle, bot=bot, game=game, vs=vs, bot_name=bot_name))
+        asyncio.run(
+            online.play_live(
+                url, token, hero, printer.handle, bot=bot, game=game, vs=vs, bot_name=bot_name
+            )
+        )
         return EXIT_OK
     except (online.ServerError, OSError) as e:
         err.print(f"[red]server error:[/] {e}")
@@ -305,7 +400,9 @@ def _do_upload(target: str, name: str | None, server: str | None, celebrate: boo
     console.print(f"[green]uploaded[/] [bold]{info['name']}[/] · entered in every tournament")
     console.print(f"next tournament starts at [bold]{info['next_tournament']}[/]")
     if info.get("page"):
-        console.print(f"your bot's page: {info['page']} [dim](results appear after its first tournament)[/]")
+        console.print(
+            f"your bot's page: {info['page']} [dim](results appear after its first tournament)[/]"
+        )
         console.print("README badge:")
         console.print(info["badge"], soft_wrap=True, markup=False)
     return info["name"]
@@ -315,7 +412,9 @@ def _do_upload(target: str, name: str | None, server: str | None, celebrate: boo
 def validate(
     file: Annotated[str, typer.Argument(help="Bot file or folder to check.")],
     hands: Annotated[int, typer.Option("--hands", help="Hands to play against [BOT]s.")] = 500,
-    time_ms: Annotated[int, typer.Option("--time-ms", help="Per-decision compute cap (server default 5 ms).")] = 5,
+    time_ms: Annotated[
+        int, typer.Option("--time-ms", help="Per-decision compute cap (server default 5 ms).")
+    ] = 5,
     strict: Annotated[bool, typer.Option("--strict", help="Treat warnings as failures.")] = False,
     game: GameOpt = "holdem",
     as_json: Annotated[bool, typer.Option("--json")] = False,
@@ -347,7 +446,7 @@ class {cls}(Bot):
         return "C" if state["to_call"] <= state["pot"] // 3 else "F"
 '''
 
-TEMPLATE_JS = '''// Reply with one line per action_request: F, X, C, "R <amount>" or A.
+TEMPLATE_JS = """// Reply with one line per action_request: F, X, C, "R <amount>" or A.
 const readline = require("readline");
 const rl = readline.createInterface({ input: process.stdin });
 rl.on("line", (line) => {
@@ -356,7 +455,7 @@ rl.on("line", (line) => {
   const reply = msg.legal.includes("X") ? "X" : "C";
   process.stdout.write(reply + "\\n");
 });
-'''
+"""
 
 
 @app.command()
@@ -377,15 +476,25 @@ def init(
     cls = "".join(part.title() for part in root.name.replace("-", "_").split("_")) or "MyBot"
     (root / entry).write_text(TEMPLATE_PY.format(cls=cls) if lang == "py" else TEMPLATE_JS)
     runtime = "python" if lang == "py" else "node"
-    (root / "pokbot.toml").write_text(f'name = "{root.name}"\nentrypoint = "{entry}"\nruntime = "{runtime}"\n')
-    console.print(f"[green]created[/] {root}/ · try: [bold]pokbot validate {root}[/] then [bold]pokbot play {root} --local[/]")
+    (root / "pokbot.toml").write_text(
+        f'name = "{root.name}"\nentrypoint = "{entry}"\nruntime = "{runtime}"\n'
+    )
+    console.print(
+        f"[green]created[/] {root}/ · try: [bold]pokbot validate {root}[/] then [bold]pokbot play {root} --local[/]"
+    )
 
 
 def _copy_to_clipboard(text: str) -> bool:
     import shutil
     import subprocess
 
-    for cmd in (["pbcopy"], ["wl-copy"], ["xclip", "-selection", "clipboard"], ["xsel", "-ib"], ["clip.exe"]):
+    for cmd in (
+        ["pbcopy"],
+        ["wl-copy"],
+        ["xclip", "-selection", "clipboard"],
+        ["xsel", "-ib"],
+        ["clip.exe"],
+    ):
         if shutil.which(cmd[0]):
             try:
                 subprocess.run(cmd, input=text.encode(), check=True, timeout=3)
@@ -397,7 +506,10 @@ def _copy_to_clipboard(text: str) -> bool:
 
 @app.command()
 def login(
-    name: Annotated[str | None, typer.Option("--name", "-n", hidden=True, help="Dev servers (POKBOT_DEV_LOGIN=1) only.")] = None,
+    name: Annotated[
+        str | None,
+        typer.Option("--name", "-n", hidden=True, help="Dev servers (POKBOT_DEV_LOGIN=1) only."),
+    ] = None,
     server: ServerOpt = None,
 ) -> None:
     """Sign in with GitHub (device code). Stores your API key in ~/.config/pokbot/credentials."""
@@ -414,11 +526,21 @@ def login(
                 flow = online.device_start(url)
             except online.ServerError as e:
                 if str(e).startswith("501"):
-                    err.print("[yellow]this server has no GitHub login; use[/] pokbot login --name NAME")
+                    err.print(
+                        "[yellow]this server has no GitHub login; use[/] pokbot login --name NAME"
+                    )
                     raise typer.Exit(EXIT_USAGE) from None
                 raise
             code = flow["user_code"]
-            console.print(Panel(f"[dim]your code[/]\n[bold]{code}[/]", expand=False, padding=(0, 3), title_align="center"), justify="left")
+            console.print(
+                Panel(
+                    f"[dim]your code[/]\n[bold]{code}[/]",
+                    expand=False,
+                    padding=(0, 3),
+                    title_align="center",
+                ),
+                justify="left",
+            )
             console.print(" ")
             if _copy_to_clipboard(code):
                 console.print("[green]✓[/] copied to your clipboard")
@@ -454,7 +576,9 @@ def logout() -> None:
 
 @app.command()
 def update(
-    force: Annotated[bool, typer.Option("--force", help="Reinstall even if already up to date.")] = False,
+    force: Annotated[
+        bool, typer.Option("--force", help="Reinstall even if already up to date.")
+    ] = False,
     server: ServerOpt = None,
 ) -> None:
     """Update pokbot to the version the server ships (reruns its installer)."""
@@ -509,9 +633,18 @@ def chat(server: ServerOpt = None) -> None:
     from .tui import PokbotApp
 
     async def source(app: PokbotApp) -> None:
-        note = f"signed in as [bold]{name}[/]" if token else "not signed in: read-only (run [bold]pokbot login[/] to talk)"
+        note = (
+            f"signed in as [bold]{name}[/]"
+            if token
+            else "not signed in: read-only (run [bold]pokbot login[/] to talk)"
+        )
         await app.handle({"type": "info", "message": f"connected to {url} · {note}"})
-        await app.handle({"type": "info", "message": "press [bold]p[/] any time to play a table yourself against [BOT]s"})
+        await app.handle(
+            {
+                "type": "info",
+                "message": "press [bold]p[/] any time to play a table yourself against [BOT]s",
+            }
+        )
         await online.watch(url, token, app.handle, on_ready=app.set_chat_sender)
 
     # Watching never blocks playing: `p` leaves for a hand-played table, then comes back here.
@@ -545,8 +678,10 @@ def schedule(server: ServerOpt = None) -> None:
     except online.ServerError as e:
         err.print(f"[red]{e}[/]")
         raise typer.Exit(EXIT_SERVER) from None
-    console.print(f"next tournament: [bold]{info['next_tournament']}[/] · {info['entrants']} entered so far"
-                  f" · [green]●[/] {info.get('online', 0)} online")
+    console.print(
+        f"next tournament: [bold]{info['next_tournament']}[/] · {info['entrants']} entered so far"
+        f" · [green]●[/] {info.get('online', 0)} online"
+    )
     if info.get("running"):
         console.print(f"running now: {info['running']}")
 
@@ -565,8 +700,15 @@ def leaderboard(server: ServerOpt = None) -> None:
     for col in ("#", "Player", "Points", "Titles", "Tournaments", "Chips", "Hands"):
         table.add_column(col)
     for i, row in enumerate(info["players"], 1):
-        table.add_row(str(i), row["name"], f"[bold]{row.get('points', 0)}[/]", str(row["titles"]),
-                      str(row["tournaments"]), f"{row['chips']:+d}", str(row["hands"]))
+        table.add_row(
+            str(i),
+            row["name"],
+            f"[bold]{row.get('points', 0)}[/]",
+            str(row["titles"]),
+            str(row["tournaments"]),
+            f"{row['chips']:+d}",
+            str(row["hands"]),
+        )
     console.print(table)
 
 

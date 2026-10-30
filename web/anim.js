@@ -1,4 +1,4 @@
-// Landing-page port of cli/src/pokbot_cli/anim.py: the BOT Arena splash and the showdown hand,
+// Landing-page port of cli/src/pokbot_cli/anim.py: the BOT Arena splash, the arena and the showdown hand,
 // drawn as a character grid into <pre id="arena-anim">. Keep the scenes in step with anim.py.
 // Static (final frame) under prefers-reduced-motion; paused while off screen or in a hidden tab.
 (() => {
@@ -6,7 +6,7 @@
   if (!el) return;
   const W = 60;
   const SUITS = "♠♥♦♣";
-  const WIDE = /[♠♥♦♣●▶▌✓]/;
+  const WIDE = /[♠♥♦♣●▶▌✓▰▱]/;
   const SPARK_STYLES = ["gold", "red", "win", "shine"];
   const TAGLINE = "submit your poker bot · it plays every 30 minutes";
   const FONT = {
@@ -74,6 +74,55 @@
         const k = Math.floor(f / 3) % 4;
         g.put(Math.floor((W - suits.length) / 2) + k * 3, 8, SUITS[k], /[♥♦]/.test(SUITS[k]) ? "red" : "gold");
       }
+      yield g;
+    }
+  }
+
+  // --- arena: six tables race through 10 sets while the set leader changes and settles ---
+  const SET_WINNERS = ["l5-shark", "tag", "l5-shark", "pairs", "pairs", "l5-shark", "pairs", "pairs", "tag", "pairs"];
+  const RACERS = ["pairs", "l5-shark", "tag"];
+  const DECK = [..."AKQJT98765432"].flatMap((r) => [...SUITS].map((s) => r + s));
+  const fmt = (n) => n.toLocaleString("en-US");
+
+  // bots, hands: live numbers from /api/leaderboard; null shows only the per-table rules.
+  function* arena(bots = null, hands = null, seed = 7) {
+    const r = rng(seed);
+    const speeds = [0, 1, 2, 3, 4, 5].map((i) => 104 + 7 * i);
+    let header = "6 tables · 10 sets × 1,000 hands each";
+    if (bots) header = `${fmt(bots)} bots entered · ` + header;
+    for (let f = 0; f < 132; f++) {
+      const g = new Grid(13);
+      g.center(0, header, "muted");
+      speeds.forEach((speed, i) => {
+        const x = 1 + (i % 3) * 20, y = 1 + Math.floor(i / 3) * 3;
+        const played = Math.min(10000, f * speed), done = played === 10000;
+        const border = done ? "win" : "back";
+        g.put(x, y, "╭" + ` table ${i + 1} `.padEnd(16, "─") + "╮", border);
+        g.put(x, y + 1, "│", border);
+        if (done) g.put(x + 2, y + 1, "✓ done", "win");
+        else for (let k = 0; k < 2; k++) { const card = pick(r, DECK); g.put(x + 2 + k * 3, y + 1, card, suitStyle(card)); }
+        g.put(x + 10, y + 1, fmt(played).padStart(6), done ? "muted" : "ink");
+        g.put(x + 17, y + 1, "│", border);
+        const sets = Math.floor(played / 1000);
+        g.put(x, y + 2, "╰", border);
+        for (let k = 0; k < 10; k++) g.put(x + 1 + k, y + 2, k < sets ? "▰" : "▱", k < sets ? "gold" : "dim");
+        g.put(x + 11, y + 2, "──────╯", border);
+      });
+      const t = Math.min(1, f / 100), ease = 1 - (1 - t) ** 3;
+      if (hands) g.center(8, `${fmt(Math.round(hands * ease))} hands played`, t === 1 && f % 8 < 4 ? "shine" : "gold");
+      else g.center(8, `${fmt(Math.round(10000 * ease))} hands at every table`, "gold");
+      const decided = Math.min(10, Math.floor(f / 10));
+      const wins = Object.fromEntries(RACERS.map((n) => [n, SET_WINNERS.slice(0, decided).filter((w) => w === n).length]));
+      const order = [...RACERS].sort((a, b) => wins[b] - wins[a] || RACERS.indexOf(a) - RACERS.indexOf(b));
+      order.forEach((name, row) => {
+        const lead = row === 0 && wins[name] > 0;
+        g.put(4, 9 + row, (lead ? "▶ " : "  ") + name.padEnd(9), lead ? "gold" : "ink");
+        g.put(16, 9 + row, "█".repeat(wins[name] * 3), lead ? "gold" : "back");
+        g.put(48, 9 + row, `${wins[name]} set${wins[name] === 1 ? "" : "s"}`, "muted");
+      });
+      if (decided < 4) g.put(2, 12, "early sets are luck: anyone can lead", "muted");
+      else if (decided < 10) g.put(2, 12, `set ${decided} of 10 · the luck is washing out`, "ink");
+      else g.put(2, 12, "10,000 hands later, the real OG is on top", "gold");
       yield g;
     }
   }
@@ -204,15 +253,22 @@
     el.innerHTML = last.html();
     return;
   }
+  let stats = [null, null];
+  if (el.dataset && el.dataset.api && window.fetch) {
+    fetch(`${el.dataset.api}/api/leaderboard`).then((r) => r.json()).then((d) => {
+      stats = [d.players.length, d.players.reduce((sum, p) => sum + (p.hands || 0), 0)];
+    }).catch(() => {});
+  }
+  const SCENES = [(s) => splash(s), (s) => arena(stats[0], stats[1], s), (s) => showdown(s)];
   let visible = true, scene = 0, frames = splash(7), timer = null, seed = 7;
   function step() {
     timer = null;
     if (!visible || document.hidden) return;
     const next = frames.next();
     if (next.done) {
-      scene = 1 - scene;
-      seed += 1;
-      frames = scene === 0 ? splash(seed) : showdown(seed);
+      scene = (scene + 1) % SCENES.length;
+      if (scene === 0) seed += 1;
+      frames = SCENES[scene](seed);
       timer = setTimeout(step, 1200); // beat between scenes
       return;
     }
