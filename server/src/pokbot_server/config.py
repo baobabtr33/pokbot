@@ -47,7 +47,7 @@ class Settings:
     # Where the static site lives (e.g. GitHub Pages). When set, the site pages redirect there
     # and /api allows cross-origin GETs from it. Empty: this server is the site.
     # Oldest CLI allowed to play. Older clients are told to update (watching still works).
-    min_cli: str = field(default_factory=lambda: os.environ.get("POKBOT_MIN_CLI", "0.2.0"))
+    min_cli: str = field(default_factory=lambda: os.environ.get("POKBOT_MIN_CLI", "0.2.1"))
     site_url: str = field(default_factory=lambda: os.environ.get("POKBOT_SITE_URL", "").rstrip("/"))
     # Container runtime for uploaded bots: "runsc" (gVisor) in production, "" for Docker's default.
     docker_runtime: str = field(default_factory=lambda: os.environ.get("POKBOT_DOCKER_RUNTIME", ""))

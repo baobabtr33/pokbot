@@ -1,6 +1,6 @@
 [project]
 name = "pokbot-server"
-version = "0.2.0"
+version = "0.2.1"
 description = "pokbot match server: matchmaking, match runner, spectators."
 requires-python = ">=3.12"
 dependencies = ["pokbot-core", "fastapi>=0.111", "uvicorn[standard]>=0.30"]
