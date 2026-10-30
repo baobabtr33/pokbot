@@ -1,4 +1,5 @@
-"""Build the static site for GitHub Pages.
+"""Build the static site for GitHub Pages: the home page, agent docs, and results pages
+(leaderboard, every bot, every tournament) generated from the game server's API.
 
     python3 scripts/build_pages.py --site https://user.github.io/pokbot \
         --api https://pokbot-server.example --out public
@@ -12,7 +13,11 @@ from __future__ import annotations
 
 import argparse
 import shutil
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import results_pages  # noqa: E402
 
 WEB = Path(__file__).resolve().parent.parent / "web"
 TEMPLATED = ("index.html", "llms.txt", "bots.md")
@@ -20,7 +25,9 @@ COPIED = ("style.css", "og.png")
 PAGES = ("/", "/bots.md", "/llms.txt")  # keep in sync with SITE_PAGES in server app.py
 
 
-def build(site: str, api: str, out: Path) -> None:
+def build(site: str, api: str, out: Path, results: tuple[list[dict], list[dict]] | None = None) -> None:
+    """`results` = (leaderboard, tournaments) for the results pages; None fetches them from
+    `api`, and the site still builds without them if the server can't be reached."""
     site, api = site.rstrip("/"), api.rstrip("/")
     out.mkdir(parents=True, exist_ok=True)
     for name in TEMPLATED:
@@ -30,7 +37,15 @@ def build(site: str, api: str, out: Path) -> None:
         shutil.copyfile(WEB / name, out / name)
     for path in WEB.glob("google*.html"):  # Search Console ownership files; must stay published
         shutil.copyfile(path, out / path.name)
-    urls = "".join(f"<url><loc>{site}{p}</loc></url>" for p in PAGES)
+    pages = list(PAGES)
+    if results is None:
+        try:
+            results = results_pages.fetch(api)
+        except OSError as e:
+            print(f"warning: no results pages ({e})")
+    if results is not None:
+        pages += results_pages.build(site, api, out, *results)
+    urls = "".join(f"<url><loc>{site}{p}</loc></url>" for p in pages)
     (out / "sitemap.xml").write_text(
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>\n'

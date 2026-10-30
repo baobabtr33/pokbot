@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths: ["web/**", "scripts/build_pages.py", ".github/workflows/pages.yml"]
   workflow_dispatch:
+  schedule:
+    - cron: "27,57 * * * *"  # after each tournament's 25-minute budget: refresh results pages
 
 permissions:
   contents: read

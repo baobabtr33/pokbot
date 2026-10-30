@@ -149,6 +149,17 @@ class Store:
             summary = {k: result[k] for k in ("tournament_id", "winner", "rounds")}
             summary["finished"] = datetime.now(UTC).isoformat()
             summary["entrants"] = len(seen)
+            summary["points"] = result.get("points", {})
+            keep = ("place", "name", "sets_won", "chips", "hands", "advances")
+            summary["tables"] = [
+                {
+                    "table": t["table"],
+                    "round": t["round"],
+                    "final": t["final"],
+                    "standings": [{k: s.get(k) for k in keep} for s in t["standings"]],
+                }
+                for t in result["tables"]
+            ]
             self.state["tournaments"] = ([summary] + self.state["tournaments"])[:100]
             self._save()
 

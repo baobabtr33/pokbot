@@ -108,7 +108,10 @@ class Games:
             summary = await match.run()
             ranked = sorted(summary["players"], key=lambda p: (-p["chips"], -p["wins"]))
             winner = ranked[0]["name"] if ranked[0]["chips"] > 0 else None
-            await conn.push({"type": "event", "event": {"type": "versus_end", "winner": winner, "result": summary}})
+            # A line anyone can paste to play the same opponent.
+            rematch = f"pokbot play mybot --vs {names[1]}" if not live else f"pokbot play --vs {names[1]}"
+            end = {"type": "versus_end", "winner": winner, "result": summary, "rematch": rematch}
+            await conn.push({"type": "event", "event": end})
         finally:
             self.active.discard(user)
             self.hub.games.pop(user, None)

@@ -295,14 +295,32 @@ def test_build_pages(tmp_path):
     import runpy
 
     build = runpy.run_path(str(Path(__file__).parent.parent / "scripts" / "build_pages.py"))["build"]
-    build("https://someone.github.io/pokbot/", "https://api.example", tmp_path)
+    results = (
+        [{"name": "ann-shark", "points": 101, "titles": 1, "tournaments": 1, "chips": 900, "hands": 10000}],
+        [{"tournament_id": "t_1", "winner": "ann-shark", "rounds": 1, "finished": "2026-10-30T00:02:00", "entrants": 1,
+          "points": {"ann-shark": 101},
+          "tables": [{"table": "r1t1", "round": 1, "final": True, "standings": [
+              {"place": 1, "name": "ann-shark", "sets_won": 7, "chips": 900, "hands": 10000, "advances": True},
+              {"place": 2, "name": "[BOT] Ace", "sets_won": 3, "chips": -900, "hands": 10000, "advances": False}]}]}],
+    )
+    build("https://someone.github.io/pokbot/", "https://api.example", tmp_path, results)
+    bot_page = (tmp_path / "bots" / "ann-shark" / "index.html").read_text()
+    assert "<title>ann-shark · poker bot #1 · BOT Arena</title>" in bot_page
+    assert '<link rel="canonical" href="https://someone.github.io/pokbot/bots/ann-shark/">' in bot_page
+    assert "pokbot play mybot --vs ann-shark" in bot_page and "api/badge/ann-shark" in bot_page
+    t_page = (tmp_path / "tournaments" / "t_1" / "index.html").read_text()
+    assert "Champion" in t_page and "Final table" in t_page and "[BOT] Ace" in t_page
+    assert "ann-shark" in (tmp_path / "leaderboard" / "index.html").read_text()
     page = (tmp_path / "index.html").read_text()
     assert "__POKBOT" not in page
     assert '<link rel="canonical" href="https://someone.github.io/pokbot/"' in page
     assert "curl -fsSL <span class=\"origin\">https://api.example</span>/install.sh" in page
     assert 'const API = "https://api.example".startsWith("__")' in page
     assert "https://someone.github.io/pokbot/bots.md" in (tmp_path / "llms.txt").read_text()
-    assert "<loc>https://someone.github.io/pokbot/llms.txt</loc>" in (tmp_path / "sitemap.xml").read_text()
+    sitemap = (tmp_path / "sitemap.xml").read_text()
+    assert "<loc>https://someone.github.io/pokbot/llms.txt</loc>" in sitemap
+    assert "<loc>https://someone.github.io/pokbot/bots/ann-shark/</loc>" in sitemap
+    assert "<loc>https://someone.github.io/pokbot/tournaments/t_1/</loc>" in sitemap
     assert (tmp_path / "og.png").stat().st_size > 1000 and (tmp_path / ".nojekyll").exists()
     assert list(tmp_path.glob("google*.html")), "Search Console verification file must be published"
 
@@ -521,3 +539,20 @@ def test_open_tables_seat_humans_any_time_and_evict_bots(tmp_path, monkeypatch):
         # ...and when ben left, a house bot took the seat back.
         assert any(e["out"] == "ben" and e["in"].startswith("[BOT]") for e in swaps)
         assert client.get("/api/leaderboard").json()["players"] == []
+
+
+def test_badge_endpoint(tmp_path, monkeypatch):
+    import pokbot_server.app as server_app
+    from pokbot_server.config import Settings
+
+    monkeypatch.setattr("pokbot_server.app.settings", Settings(data_dir=tmp_path))
+    with TestClient(server_app.create_app(start_scheduler=False)) as client:
+        store = client.app.state.store
+        store.state["leaderboard"] = {
+            "a-bot": {"name": "a-bot", "points": 101, "titles": 1, "chips": 5, "tournaments": 1, "hands": 1},
+            "b-bot": {"name": "b-bot", "points": 61, "titles": 0, "chips": 3, "tournaments": 1, "hands": 1},
+        }
+        assert client.get("/api/badge/a-bot").json() == {
+            "schemaVersion": 1, "label": "BOT Arena", "message": "#1 · 101 pts · 1 🏆", "color": "gold"}
+        assert client.get("/api/badge/b-bot").json()["message"] == "#2 · 61 pts"
+        assert client.get("/api/badge/nope").json()["message"] == "unranked"

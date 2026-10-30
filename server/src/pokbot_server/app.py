@@ -54,6 +54,16 @@ def _version(text: str | None) -> tuple[int, ...]:
         return ()
 
 
+def share_links(bot: str) -> dict:
+    """Where a bot's public page and README badge live (static site when there is one)."""
+    base = (settings.public_url or "").rstrip("/")
+    site = settings.site_url or base
+    return {
+        "page": f"{site}/bots/{bot}/",
+        "badge": f"[![BOT Arena](https://img.shields.io/endpoint?url={base}/api/badge/{bot})]({site}/bots/{bot}/)",
+    }
+
+
 def outdated_cli(client: str | None) -> str | None:
     """The message for a CLI older than POKBOT_MIN_CLI (clients before 0.2.0 send no version)."""
     if _version(client) >= _version(settings.min_cli):
@@ -224,7 +234,7 @@ def create_app(start_scheduler: bool = True) -> FastAPI:
             raise HTTPException(400, str(e)) from None
         finally:
             shutil.rmtree(staging, ignore_errors=True)
-        return {**record, "next_tournament": hub.next_at.isoformat()}
+        return {**record, "next_tournament": hub.next_at.isoformat(), **share_links(record["name"])}
 
     @app.delete("/api/bots/{name}")
     def delete_bot(name: str, authorization: str | None = Header(None)) -> dict:
@@ -257,6 +267,21 @@ def create_app(start_scheduler: bool = True) -> FastAPI:
     @app.get("/api/tournaments")
     def tournaments() -> dict:
         return {"tournaments": store.state["tournaments"]}
+
+    @app.get("/api/badge/{name}")
+    def badge(name: str) -> Response:
+        """shields.io endpoint badge: ![pokbot](https://img.shields.io/endpoint?url=<server>/api/badge/<bot>)"""
+        board = store.leaderboard()
+        rank = next((i for i, r in enumerate(board) if r["name"] == name), None)
+        if rank is None:
+            body = {"schemaVersion": 1, "label": "BOT Arena", "message": "unranked", "color": "lightgrey"}
+        else:
+            row = board[rank]
+            titles = f" · {row['titles']} 🏆" if row["titles"] else ""
+            color = "gold" if rank == 0 else "brightgreen" if rank < 10 else "blue"
+            body = {"schemaVersion": 1, "label": "BOT Arena",
+                    "message": f"#{rank + 1} · {row.get('points', 0)} pts{titles}", "color": color}
+        return Response(json.dumps(body), media_type="application/json", headers={"Cache-Control": "max-age=300"})
 
     @app.get("/api/games")
     def games() -> dict:

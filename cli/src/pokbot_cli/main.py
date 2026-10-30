@@ -268,6 +268,10 @@ def _do_upload(target: str, name: str | None, server: str | None) -> str:
         raise typer.Exit(EXIT_SERVER) from None
     console.print(f"[green]uploaded[/] [bold]{info['name']}[/] · entered in every tournament")
     console.print(f"next tournament starts at [bold]{info['next_tournament']}[/]")
+    if info.get("page"):
+        console.print(f"your bot's page: {info['page']} [dim](results appear after its first tournament)[/]")
+        console.print("README badge:")
+        console.print(info["badge"], soft_wrap=True, markup=False)
     return info["name"]
 
 

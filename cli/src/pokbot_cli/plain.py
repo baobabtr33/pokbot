@@ -70,6 +70,8 @@ class PlainPrinter:
             for p in event["result"]["players"]:
                 console.print(f"  {p['name']:24} {p['chips']:+7d}  {p['bb_per_100']:+8.1f} bb/100")
             console.print(f"[bold yellow]  🏆  {event['winner'] or 'nobody'}  🏆[/]  (heads-up, no leaderboard points)")
+            if event.get("rematch"):
+                console.print(f"  rematch or share: [bold]{event['rematch']}[/]")
         elif kind == "tournament_end":
             self.result = event
             console.print(f"[bold yellow]{WINNER}[/]")

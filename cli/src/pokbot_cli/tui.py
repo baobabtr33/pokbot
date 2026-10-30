@@ -360,6 +360,8 @@ class PokbotApp(App[str | None]):
             self.status = f"winner: {winner}"
             line = " · ".join(f"[bold]{escape(p['name'])}[/] {p['chips']:+d} ({p['bb_per_100']:+.1f} bb/100)" for p in summary["players"])
             self.log_line(f"[bold yellow]Heads-up over[/] after {summary['hands']} hands · {line}")
+            if event.get("rematch"):
+                self.log_line(f"rematch or share: [bold]{escape(event['rematch'])}[/]")
             if self.practice:
                 self.log_line("[bold green]press p to play a table yourself now[/]")
                 self.refresh_bindings()
