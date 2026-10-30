@@ -1,4 +1,5 @@
 import asyncio
+import json
 from pathlib import Path
 
 import pytest
@@ -556,3 +557,31 @@ def test_badge_endpoint(tmp_path, monkeypatch):
             "schemaVersion": 1, "label": "BOT Arena", "message": "#1 · 101 pts · 1 🏆", "color": "gold"}
         assert client.get("/api/badge/b-bot").json()["message"] == "#2 · 61 pts"
         assert client.get("/api/badge/nope").json()["message"] == "unranked"
+
+
+async def test_mcp_server_lists_tools_and_validates_a_bot():
+    import io
+
+    from pokbot_cli.mcp import serve
+
+    requests = [
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18"}},
+        {"jsonrpc": "2.0", "method": "notifications/initialized"},
+        {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+        {"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+         "params": {"name": "validate_bot", "arguments": {"path": str(EXAMPLES / "pairs.py")}}},
+        {"jsonrpc": "2.0", "id": 4, "method": "tools/call",
+         "params": {"name": "validate_bot", "arguments": {"path": "/nope.py"}}},
+        {"jsonrpc": "2.0", "id": 5, "method": "nope"},
+    ]
+    out = io.StringIO()
+    await serve(io.StringIO("".join(json.dumps(r) + "\n" for r in requests)), out)
+    replies = {r["id"]: r for r in map(json.loads, out.getvalue().splitlines())}
+    assert set(replies) == {1, 2, 3, 4, 5}  # the notification gets no reply
+    assert replies[1]["result"]["serverInfo"]["name"] == "pokbot"
+    names = {t["name"] for t in replies[2]["result"]["tools"]}
+    assert {"rules", "validate_bot", "submit_bot", "challenge", "leaderboard", "login_start"} <= names
+    report = json.loads(replies[3]["result"]["content"][0]["text"])
+    assert replies[3]["result"]["isError"] is False and report["ok"]
+    assert replies[4]["result"]["isError"] and "no such file" in replies[4]["result"]["content"][0]["text"]
+    assert replies[5]["error"]["code"] == -32601

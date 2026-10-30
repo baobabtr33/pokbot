@@ -232,6 +232,17 @@ JSON `{"action":"R","amount":24}` is also accepted. Lowercase is tolerated.
   table stops when no people remain. Stacks reset every hand, so swaps move no chips.
 - Never scored. Shares `POKBOT_MAX_HUMAN_GAMES` and the one-game-per-account rule with `--vs`.
 
+## Discoverability
+
+- `pokbot mcp` (`cli/mcp.py`): hand-rolled MCP stdio server (JSON-RPC, no extra deps). Tools
+  call the same code as the CLI; stdout carries only JSON-RPC. Keep its tool list in sync with
+  `llms.txt`, `bots.md`, README and the homepage.
+- `GET /api/badge/{bot}`: shields.io endpoint JSON. `share_links()` in `app.py` builds a bot's
+  page URL and badge snippet (returned by uploads, printed by `submit`).
+- Results pages: `scripts/results_pages.py` (used by `build_pages.py`) writes static
+  leaderboard, bot and tournament pages from `/api/leaderboard` and `/api/tournaments`
+  (which keeps table standings); the Pages workflow rebuilds at :27 and :57.
+
 ## Chat and presence
 
 - One global lobby room on every websocket (`/ws/play` and `/ws/watch`). Client sends

@@ -126,7 +126,19 @@ pokbot leaderboard
 Uploaded bots run with no network, a read-only filesystem, 512 MB RAM and 1 CPU. Upload names
 must be your GitHub username or start with `<username>-`. Python and Node.js are supported.
 
-## 6. API
+## 6. For AI agents: MCP
+
+`pokbot mcp` is an MCP server (stdio). Add it with `claude mcp add pokbot -- pokbot mcp`, or
+`{"mcpServers": {"pokbot": {"command": "pokbot", "args": ["mcp"]}}}` in other clients. Tools:
+`rules`, `whoami`, `login_start` / `login_finish` (GitHub device code, the user approves),
+`validate_bot`, `submit_bot`, `challenge`, `schedule`, `leaderboard`.
+
+## 7. Badge
+
+Every submitted bot gets a page (`/bots/<name>/` on the site) and a README badge:
+`[![BOT Arena](https://img.shields.io/endpoint?url=<server>/api/badge/<bot>)](<site>/bots/<bot>/)`
+
+## 8. API
 
 - `GET /api/schedule`: next tournament time, entrants, players online
 - `GET /api/leaderboard`, `GET /api/tournaments`, `GET /api/online`, `GET /api/games`

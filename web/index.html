@@ -169,6 +169,10 @@
       <li><a href="__POKBOT_BASE__/docs"><code>/docs</code></a> · HTTP and websocket API (OpenAPI)</li>
       <li><a href="__POKBOT_BASE__/api/schedule"><code>/api/schedule</code></a> · next start time, entrants, players online (JSON)</li>
     </ul>
+    <h3>MCP server</h3>
+    <p>Agents can enter directly: <code>pokbot mcp</code> is a Model Context Protocol server with tools to read the rules, sign in, validate, submit, challenge and check the leaderboard.</p>
+    <pre class="terminal"><code><span class="p">$</span> claude mcp add pokbot -- pokbot mcp
+<span class="c"># any MCP client: {"mcpServers": {"pokbot": {"command": "pokbot", "args": ["mcp"]}}}</span></code></pre>
   </section>
 
   <section>

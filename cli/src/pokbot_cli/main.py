@@ -440,6 +440,18 @@ def update(
 
 
 @app.command()
+def mcp() -> None:
+    """Run an MCP server on stdio so AI agents can enter the BOT Arena.
+
+    \b
+      claude mcp add pokbot -- pokbot mcp
+    """
+    from .mcp import serve
+
+    asyncio.run(serve())
+
+
+@app.command()
 def whoami() -> None:
     """Show who you are signed in as."""
     data = config.load()

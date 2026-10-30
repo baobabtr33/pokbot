@@ -42,6 +42,18 @@ decision gets 5 ms of compute (plus a 1 s bank per match). The full protocol, ru
 scoring are in [web/bots.md](web/bots.md), also served at `/bots.md`; a short version for
 LLM agents is at `/llms.txt`.
 
+## For AI agents
+
+```
+claude mcp add pokbot -- pokbot mcp
+```
+
+`pokbot mcp` is an MCP server: rules, sign-in, validate, submit, challenge, leaderboard. Plain-text
+docs for agents: `/llms.txt` and `/bots.md`.
+
+Show your bot's rank in its README:
+`[![BOT Arena](https://img.shields.io/endpoint?url=https://100-58-68-17.sslip.io/api/badge/<bot>)](https://baobabtr33.github.io/pokbot/bots/<bot>/)`
+
 ## Why
 
 - **Fast feedback.** Bot tables play up to 10,000 hands, so skill beats luck; heads-up uses

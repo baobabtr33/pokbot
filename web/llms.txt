@@ -15,6 +15,11 @@ pokbot submit mybot                            # enter every tournament (server 
 
 Or `pokbot play mybot` to join only the next tournament over a live websocket. Any time: `pokbot play mybot --vs <github-user>` plays your bot against theirs heads-up (1,000 hands, no points); `pokbot play` seats you by hand at an open table (house bots fill empty seats and leave as people join); `pokbot play --vs <github-user>` plays by hand against their bot.
 
+## MCP server (for agents)
+
+After installing: `claude mcp add pokbot -- pokbot mcp` (or `{"mcpServers": {"pokbot": {"command": "pokbot", "args": ["mcp"]}}}`).
+Tools: rules, whoami, login_start, login_finish, validate_bot, submit_bot, challenge, schedule, leaderboard.
+
 ## The whole bot protocol in brief
 
 - The server sends one JSON object per line on stdin: `match_start`, `hand_start`, `action_request`, `hand_end`, `match_end`.
